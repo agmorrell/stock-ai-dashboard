@@ -221,12 +221,28 @@ with tab2:
         
         if st.button("🤖 Get AI Buy/Sell Recommendations"):
             portfolio_text = portfolio_df.to_string(index=False)
-            suggestion_prompt = f"Analyze this portfolio and suggest buy/sell/hold actions with reasoning:\n\n{portfolio_text}"
-            with st.spinner("Analyzing..."):
-                suggestions = call_grok(suggestion_prompt)
-                st.subheader("🤖 AI Recommendations")
-                st.markdown(suggestions)
-    else:
-        st.info("No holdings yet. Add some above.")
+                suggestion_prompt = f"""You are an experienced market analyst and portfolio advisor. Analyze my current portfolio in detail and provide **specific, actionable recommendations**.
+
+            My current portfolio:
+            {portfolio_text}
+            
+            Today's market context (use real-time knowledge):
+            - Highest short-term momentum sectors and why
+            - Any relevant catalysts (earnings, macro events, commodity moves like oil)
+            
+            For each holding or new opportunity, give:
+            - **Buy / Sell / Hold / Trim / Add** recommendation
+            - **Specific entry or exit zones** (price levels or technical triggers if applicable)
+            - **How much** to buy or sell (e.g., "Add 20% more capital", "Trim 30% of position", "Sell 50 shares", or "% of portfolio")
+            - **Diversification suggestion**: Where to move capital (e.g., rotate from overvalued Tech into Energy/Industrials/Materials, or add defensive names)
+            - Clear reasoning tied to momentum, valuation, risk, and catalysts
+            - Risk level (Low / Medium / High) and suggested stop-loss ideas
+            
+            Overall portfolio advice:
+            - Rebalancing summary (what % in hot momentum sectors vs defensive)
+            - Suggested new watchlist stocks for entry
+            - Risk management notes for aggressive growth with downside protection
+            
+            Be detailed, realistic, and prioritize high-probability opportunities. Use bullet points and clear sections for readability."""
 
 st.caption("Built with Streamlit + yfinance + Grok API • Trade responsibly")
