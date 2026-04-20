@@ -43,6 +43,12 @@ def save_holding(ticker, shares, cost_basis):
     conn.commit()
     conn.close()
 
+def clear_all_holdings():
+    conn = get_db_connection()
+    conn.execute("DELETE FROM holdings")
+    conn.commit()
+    conn.close()
+
 # ----------------- PORTFOLIO CALCULATION -----------------
 @st.cache_data(ttl=300)
 def calculate_portfolio():
@@ -93,7 +99,7 @@ def call_grok(prompt):
     if not api_key:
         return "❌ Grok API key not found in Streamlit Secrets."
     
-    model = "grok-4-1-fast-reasoning"   # Fast and cost-effective for detailed analysis
+    model = "grok-4.1-fast-reasoning"
     
     try:
         response = requests.post(
@@ -116,7 +122,7 @@ def call_grok(prompt):
     except Exception as e:
         return f"❌ Request Error: {str(e)}"
 
-# ----------------- COMBINED FULL ANALYSIS + PORTFOLIO ADVICE -----------------
+# ----------------- COMBINED FULL ANALYSIS -----------------
 def run_full_analysis():
     today = datetime.now().strftime("%B %d, %Y")
     
@@ -183,6 +189,7 @@ with tab1:
 with tab2:
     st.header("Portfolio Tracker")
     
+    # Add or Update Holding
     with st.expander("➕ Add or Update Holding"):
         col1, col2, col3 = st.columns(3)
         with col1:
@@ -202,6 +209,18 @@ with tab2:
             else:
                 st.error("Please fill in all fields correctly.")
     
+    # NEW: Clear Portfolio Button
+    if st.button("🗑️ Clear All Portfolio Data", type="secondary"):
+        if st.checkbox("⚠️ I confirm I want to permanently delete ALL holdings"):
+            clear_all_holdings()
+            st.cache_data.clear()
+            st.success("✅ All portfolio data has been cleared!")
+            time.sleep(1.0)
+            st.rerun()
+        else:
+            st.warning("Please check the confirmation box to clear all data.")
+    
+    # Display Portfolio
     portfolio_df = calculate_portfolio()
     if not portfolio_df.empty:
         st.dataframe(portfolio_df.style.format({
