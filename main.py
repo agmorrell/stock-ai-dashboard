@@ -1,5 +1,5 @@
 import appdirs as ad
-ad.user_cache_dir = lambda *args: "/tmp"
+ad.user_cache_dir = lambda *args: "/tmp"   # Critical for Streamlit Cloud
 
 import streamlit as st
 import pandas as pd
@@ -41,6 +41,10 @@ def save_holding(ticker, shares, cost_basis):
     conn.commit()
     conn.close()
 
+import time
+import random
+from yfinance import Ticker
+
 def calculate_portfolio():
     df = load_holdings()
     if df.empty:
@@ -48,24 +52,46 @@ def calculate_portfolio():
     
     data = []
     for _, row in df.iterrows():
-        ticker = yf.Ticker(row['ticker'])
-        info = ticker.info
-        current_price = info.get('currentPrice') or info.get('regularMarketPrice') or info.get('previousClose', 0)
-        
-        current_value = row['shares'] * current_price
-        cost = row['shares'] * row['cost_basis']
-        gain_dollar = current_value - cost
-        gain_pct = (gain_dollar / cost * 100) if cost > 0 else 0
-        
-        data.append({
-            'Ticker': row['ticker'],
-            'Shares': row['shares'],
-            'Cost Basis': row['cost_basis'],
-            'Current Price': round(current_price, 2),
-            'Current Value': round(current_value, 2),
-            'Unrealized Gain $': round(gain_dollar, 2),
-            'Unrealized Gain %': round(gain_pct, 2)
-        })
+        ticker_symbol = row['ticker']
+        try:
+            # Small random delay to avoid hammering Yahoo
+            time.sleep(random.uniform(0.8, 1.5))
+            
+            ticker = Ticker(ticker_symbol)
+            info = ticker.info
+            
+            current_price = info.get('currentPrice') or info.get('regularMarketPrice') or \
+                           info.get('previousClose') or info.get('regularMarketPreviousClose', 0)
+            
+            if current_price == 0:
+                current_price = 0  # fallback
+            
+            current_value = row['shares'] * current_price
+            cost = row['shares'] * row['cost_basis']
+            gain_dollar = current_value - cost
+            gain_pct = (gain_dollar / cost * 100) if cost > 0 else 0
+            
+            data.append({
+                'Ticker': ticker_symbol,
+                'Shares': row['shares'],
+                'Cost Basis': round(row['cost_basis'], 2),
+                'Current Price': round(current_price, 2),
+                'Current Value': round(current_value, 2),
+                'Unrealized Gain $': round(gain_dollar, 2),
+                'Unrealized Gain %': round(gain_pct, 2)
+            })
+            
+        except Exception as e:  # Catch rate limit and other yfinance errors
+            data.append({
+                'Ticker': ticker_symbol,
+                'Shares': row['shares'],
+                'Cost Basis': round(row['cost_basis'], 2),
+                'Current Price': "Error",
+                'Current Value': "N/A",
+                'Unrealized Gain $': "N/A",
+                'Unrealized Gain %': "N/A"
+            })
+            st.warning(f"Could not fetch data for {ticker_symbol}: {str(e)[:100]}...")
     
     return pd.DataFrame(data)
 
