@@ -196,10 +196,7 @@ with tab2:
             st.success(f"✅ {ticker} saved!")
             st.rerun()
     
-    # Display Portfolio
-    portfolio_df = calculate_portfolio()
-    if not portfolio_df.empty:
-            # Display Portfolio
+       # Display Portfolio
     portfolio_df = calculate_portfolio()
     if not portfolio_df.empty:
         st.dataframe(portfolio_df.style.format({
@@ -242,10 +239,6 @@ with tab2:
                 color_continuous_scale='RdYlGn'  # Green = profit, Red = loss
             )
             st.plotly_chart(fig_bar, use_container_width=True)
-    else:
-        st.info("No holdings yet. Add some using the form above.")
-        st.metric("Total Unrealized P/L", f"${total_gain:,.2f}", 
-                  delta=f"{(total_gain/total_cost*100):.2f}%" if total_cost > 0 else "0%")
     else:
         st.info("No holdings yet. Add some using the form above.")
 
