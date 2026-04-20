@@ -78,7 +78,7 @@ def add_pending_order(ticker, order_type, shares, limit_price):
 
 def load_pending_orders():
     conn = get_db_connection()
-    df = pd.read_sql_query("SELECT * FROM pending_orders", conn)
+    df = pd.read_sql_query("SELECT * FROM pending_orders ORDER BY id", conn)
     conn.close()
     return df
 
@@ -262,7 +262,7 @@ with tab2:
                 st.success(f"✅ {ticker} saved!")
                 st.rerun()
 
-    # Pending Orders
+    # Add Pending Order
     with st.expander("📋 Add Pending Order"):
         col1, col2 = st.columns(2)
         with col1:
@@ -318,7 +318,6 @@ with tab2:
             if numeric_value.sum() > 0:
                 fig_pie = px.pie(portfolio_df, values='Current Value', names='Ticker', title="Allocation by Ticker")
                 st.plotly_chart(fig_pie, use_container_width=True)
-        
         with col2:
             st.subheader("Gains / Losses")
             fig_bar = px.bar(portfolio_df, x='Ticker', y='Unrealized Gain $', 
@@ -327,26 +326,30 @@ with tab2:
                             color_continuous_scale='RdYlGn')
             st.plotly_chart(fig_bar, use_container_width=True)
 
-    # Pending Orders with Individual Delete
+    # ================== PENDING ORDERS WITH TRASH ICON ==================
     pending_df = load_pending_orders()
     if not pending_df.empty:
         st.subheader("📋 Pending Orders")
         
         for idx, row in pending_df.iterrows():
-            col1, col2, col3 = st.columns([3, 2, 1])
-            with col1:
-                st.write(f"**{row['ticker']}** - {row['order_type']} {row['shares']} shares @ ${row['limit_price']:.2f}")
-            with col2:
-                st.write(f"ID: {row['id']} | Status: {row['status']}")
-            with col3:
-                if st.button("🗑️ Delete", key=f"del_{row['id']}"):
-                    if st.checkbox(f"Confirm delete order {row['id']}?", key=f"conf_{row['id']}"):
-                        delete_pending_order(row['id'])
-                        st.cache_data.clear()
-                        st.success(f"Order {row['id']} deleted!")
-                        st.rerun()
-                    else:
-                        st.warning("Check the box to confirm deletion.")
+            with st.container(border=True):
+                col1, col2, col3 = st.columns([4, 3, 1])
+                with col1:
+                    st.write(f"**{row['ticker']}** — **{row['order_type']}** {row['shares']} shares @ **${row['limit_price']:.2f}**")
+                with col2:
+                    st.write(f"ID: {row['id']} | Status: {row['status']}")
+                with col3:
+                    if st.button("🗑️", key=f"delete_{row['id']}", help="Delete this order"):
+                        # Show confirmation inline
+                        if st.checkbox("Confirm delete?", key=f"conf_{row['id']}"):
+                            delete_pending_order(row['id'])
+                            st.cache_data.clear()
+                            st.success(f"Deleted order for {row['ticker']}")
+                            st.rerun()
+                        else:
+                            st.info("Check the box above to confirm deletion.")
+    else:
+        st.info("No pending orders yet.")
 
     st.info(f"💰 Available Cash: ${get_cash_balance():,.2f}")
 
