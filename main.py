@@ -6,6 +6,8 @@ import json
 import sqlite3
 import requests
 import os
+import appdirs as ad
+ad.user_cache_dir = lambda *args: "/tmp"
 
 st.set_page_config(page_title="AI Stock Dashboard", layout="wide")
 st.title("🚀 My Personal AI Stock Dashboard")
