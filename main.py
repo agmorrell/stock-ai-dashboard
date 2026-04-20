@@ -163,16 +163,27 @@ with tab2:
     with st.expander("➕ Add or Update Holding"):
         col1, col2, col3 = st.columns(3)
         with col1:
-            ticker = st.text_input("Ticker", placeholder="AAPL").upper()
+            ticker = st.text_input("Ticker Symbol", placeholder="AAPL").upper()
         with col2:
-            shares = st.number_input("Shares", min_value=0.01, value=10.0)
+            shares = st.number_input("Number of Shares", min_value=0.01, value=10.0)
         with col3:
             cost = st.number_input("Cost Basis per Share ($)", min_value=0.01, value=150.0)
-        if st.button("Save Holding"):
-            save_holding(ticker, shares, cost)
-            st.success(f"{ticker} saved!")
-            st.rerun()
-    
+        
+        if st.button("Save Holding", type="primary"):
+            if ticker and shares > 0 and cost > 0:
+                save_holding(ticker, shares, cost)
+                st.cache_data.clear()                    # Force refresh of portfolio cache
+                st.success(f"✅ {ticker} saved successfully! Refreshing portfolio...")
+                time.sleep(0.8)                          # Small pause so user sees the message
+                st.rerun()                               # Still attempt rerun as backup
+            else:
+                st.error("Please fill in all fields correctly.")
+    # Force cache clear if needed (optional safety)
+    if st.button("🔄 Refresh Portfolio Prices", key="refresh_prices"):
+        st.cache_data.clear()
+        st.success("Portfolio refreshed!")
+        st.rerun()
+        
     portfolio_df = calculate_portfolio()
     if not portfolio_df.empty:
         st.dataframe(portfolio_df.style.format({
