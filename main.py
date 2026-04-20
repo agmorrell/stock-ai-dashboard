@@ -138,7 +138,7 @@ def call_grok(prompt):
     if not api_key:
         return "❌ Grok API key not found in Streamlit Secrets."
     
-    model = "grok-4.1-fast-reasoning"
+    model = "grok-4-1-fast-reasoning"
     
     try:
         response = requests.post(
@@ -148,7 +148,7 @@ def call_grok(prompt):
                 "model": model,
                 "messages": [{"role": "user", "content": prompt}],
                 "temperature": 0.7,
-                "max_tokens": 7000   # Increased for more detailed combined response
+                "max_tokens": 7000
             },
             timeout=150
         )
@@ -161,7 +161,7 @@ def call_grok(prompt):
     except Exception as e:
         return f"❌ Request Error: {str(e)}"
 
-# ----------------- COMBINED FULL ANALYSIS (Now Includes Cash + Pending Orders) -----------------
+# ----------------- COMBINED FULL ANALYSIS -----------------
 def run_full_analysis():
     today = datetime.now().strftime("%B %d, %Y")
     
@@ -174,9 +174,7 @@ def run_full_analysis():
     
     prompt = f"""You are a professional market analyst and portfolio manager. Today's date is {today}.
 
-Provide a **comprehensive daily report** including cash and pending orders.
-
-**Current Portfolio Snapshot:**
+Current Portfolio Snapshot:
 Cash Available: ${cash:,.2f}
 Holdings:
 {portfolio_text}
@@ -184,28 +182,28 @@ Pending Orders:
 {pending_text}
 
 **Part 1: Market Overview**
-1. Identify stock sectors with the highest short-term momentum and explain why.
-2. Build a high-probability watchlist: 10 stocks with volatility, volume, and catalyst potential.
-3. Create 5 actionable day trading setups with entry zones, stop losses, and profit targets.
-4. Suggest a capital management strategy for aggressive gains while limiting downside.
-5. List upcoming earnings, macro events, or news catalysts this week.
+1. Highest short-term momentum sectors and why.
+2. 10-stock high-probability watchlist with volatility, volume, catalysts.
+3. 5 day trading setups with entry zones, stop losses, profit targets.
+4. Capital management strategy for aggressive gains with limited downside.
+5. Upcoming earnings, macro events, or news this week.
 
-**Part 2: Personalized Recommendations (Using Cash + Pending Orders)**
-For each holding and new opportunities:
-- **Buy / Sell / Hold / Trim / Add** recommendation
-- Specific entry or exit price zones or technical triggers
-- How much to buy/sell (use available cash wisely, suggest % of cash or shares)
-- Diversification suggestions (e.g., rotate from one sector to Energy/Industrials)
-- Reasoning tied to momentum, catalysts, risk, and your cash position
-- Risk level (Low/Medium/High) and stop-loss ideas
+**Part 2: Personalized Recommendations**
+For each holding and opportunities:
+- Buy / Sell / Hold / Trim / Add recommendation
+- Specific entry/exit price zones or triggers
+- How much to buy/sell (consider available cash)
+- Diversification moves
+- Reasoning based on momentum, catalysts, and your cash/pending orders
+- Risk level and stop-loss ideas
 
 **Overall Strategy**
-- How to deploy available cash effectively
-- What to do with pending orders (keep, modify, cancel?)
-- Rebalancing summary and suggested new positions
-- How to compound gains responsibly
+- Cash deployment suggestions
+- Pending orders advice (keep/modify/cancel)
+- Rebalancing and new position ideas
+- Compounding plan
 
-Be detailed, realistic, and actionable. Use clear headings and bullet points."""
+Use clear headings and bullet points."""
 
     with st.spinner("Generating full analysis including cash and pending orders..."):
         result = call_grok(prompt)
@@ -217,7 +215,7 @@ with st.sidebar:
     st.header("Controls")
     if st.button("🔥 Run Full Daily Analysis + Portfolio Advice", type="primary"):
         run_full_analysis()
-        st.success("✅ Full analysis ready (includes cash & pending orders)!")
+        st.success("✅ Full analysis ready!")
     
     if st.button("🔄 Refresh Portfolio Prices"):
         st.cache_data.clear()
@@ -231,7 +229,7 @@ with tab1:
     if "full_analysis" in st.session_state:
         st.markdown(st.session_state.full_analysis)
     else:
-        st.info("Click the big button in the sidebar for today's full report.")
+        st.info("Click the button in the sidebar for today's full report.")
 
 with tab2:
     st.header("Portfolio Tracker")
@@ -242,7 +240,7 @@ with tab2:
     new_cash = st.number_input("Update Cash Available ($)", min_value=0.0, value=current_cash, step=100.0)
     if st.button("Update Cash Balance"):
         update_cash_balance(new_cash)
-        st.success(f"Cash balance updated to ${new_cash:,.2f}")
+        st.success(f"Cash updated to ${new_cash:,.2f}")
         st.rerun()
 
     st.divider()
@@ -275,35 +273,40 @@ with tab2:
         if st.button("Add Pending Order", type="primary", key="add_po"):
             if po_ticker:
                 add_pending_order(po_ticker, po_type, po_shares, po_price)
-                st.success(f"✅ Pending {po_type} order for {po_ticker} added!")
+                st.success(f"✅ Pending {po_type} for {po_ticker} added!")
                 st.rerun()
 
     # Clear Buttons
     col_clear1, col_clear2 = st.columns(2)
     with col_clear1:
-        if st.button("🗑️ Clear All Holdings", type="secondary"):
+        if st.button("🗑️ Clear All Holdings"):
             if st.checkbox("Confirm delete ALL holdings"):
                 clear_all_holdings()
                 st.cache_data.clear()
-                st.success("All holdings cleared!")
+                st.success("Holdings cleared!")
                 st.rerun()
     with col_clear2:
         if st.button("🗑️ Clear Pending Orders"):
             if st.checkbox("Confirm delete ALL pending orders"):
                 clear_all_pending_orders()
-                st.success("All pending orders cleared!")
+                st.success("Pending orders cleared!")
                 st.rerun()
 
-    # Display Current Portfolio
+    # Display Holdings (Fixed formatting)
     portfolio_df = calculate_portfolio()
     if not portfolio_df.empty:
         st.subheader("Current Holdings")
-        st.dataframe(portfolio_df.style.format({
-            "Current Price": "${:.2f}",
-            "Current Value": "${:.2f}",
-            "Unrealized Gain $": "${:.2f}",
-            "Unrealized Gain %": "{:.2f}%"
-        }), use_container_width=True, hide_index=True)
+        
+        # Safe formatting that handles "N/A"
+        styled_df = portfolio_df.style.format({
+            "Cost Basis": "${:.2f}",
+            "Current Price": lambda x: f"${x:.2f}" if isinstance(x, (int, float)) else x,
+            "Current Value": lambda x: f"${x:.2f}" if isinstance(x, (int, float)) else x,
+            "Unrealized Gain $": lambda x: f"${x:.2f}" if isinstance(x, (int, float)) else x,
+            "Unrealized Gain %": lambda x: f"{x:.2f}%" if isinstance(x, (int, float)) else x
+        })
+        
+        st.dataframe(styled_df, use_container_width=True, hide_index=True)
         
         total_gain = portfolio_df["Unrealized Gain $"].sum()
         total_cost = (portfolio_df["Shares"] * portfolio_df["Cost Basis"]).sum()
@@ -312,19 +315,22 @@ with tab2:
         
         st.divider()
         col1, col2 = st.columns(2)
+        
         with col1:
             st.subheader("Portfolio Allocation")
             if portfolio_df["Current Value"].sum() > 0:
                 fig_pie = px.pie(portfolio_df, values='Current Value', names='Ticker', title="Allocation by Ticker")
                 st.plotly_chart(fig_pie, use_container_width=True)
+        
         with col2:
             st.subheader("Gains / Losses")
             fig_bar = px.bar(portfolio_df, x='Ticker', y='Unrealized Gain $', 
-                            title="Unrealized Profit/Loss", color='Unrealized Gain %',
+                            title="Unrealized Profit/Loss by Position",
+                            color='Unrealized Gain %',
                             color_continuous_scale='RdYlGn')
             st.plotly_chart(fig_bar, use_container_width=True)
 
-    # Display Pending Orders
+    # Pending Orders Table
     pending_df = load_pending_orders()
     if not pending_df.empty:
         st.subheader("📋 Pending Orders")
