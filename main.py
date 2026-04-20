@@ -82,6 +82,12 @@ def load_pending_orders():
     conn.close()
     return df
 
+def delete_pending_order(order_id):
+    conn = get_db_connection()
+    conn.execute("DELETE FROM pending_orders WHERE id = ?", (order_id,))
+    conn.commit()
+    conn.close()
+
 def clear_all_pending_orders():
     conn = get_db_connection()
     conn.execute("DELETE FROM pending_orders")
@@ -180,22 +186,22 @@ Pending Orders:
 **Part 1: Market Overview**
 1. Highest short-term momentum sectors and why.
 2. 10-stock high-probability watchlist.
-3. 5 day trading setups with entry, stop loss, profit targets.
+3. 5 day trading setups with entry zones, stop losses, profit targets.
 4. Capital management strategy.
 5. Upcoming earnings / macro events this week.
 
 **Part 2: Personalized Recommendations**
 - Buy/Sell/Hold/Trim/Add for each holding
-- Specific entry/exit zones
-- How much to buy or sell (considering cash)
-- Diversification suggestions
-- Reasoning tied to momentum and your cash/pending orders
+- Specific entry/exit price zones
+- How much to buy/sell (considering cash)
+- Diversification moves
+- Reasoning based on momentum and your cash/pending orders
 - Risk level and stop ideas
 
 **Overall Strategy**
-- Cash deployment
-- Pending orders advice
-- Rebalancing
+- Cash deployment suggestions
+- Pending orders advice (keep/modify/cancel)
+- Rebalancing and new position ideas
 - Compounding plan
 
 Use clear headings and bullet points."""
@@ -271,27 +277,26 @@ with tab2:
                 st.success(f"✅ Pending {po_type} for {po_ticker} added!")
                 st.rerun()
 
-    # Clear Buttons
+    # Clear All Buttons
     col_clear1, col_clear2 = st.columns(2)
     with col_clear1:
         if st.button("🗑️ Clear All Holdings"):
             if st.checkbox("Confirm delete ALL holdings"):
                 clear_all_holdings()
                 st.cache_data.clear()
-                st.success("Holdings cleared!")
+                st.success("All holdings cleared!")
                 st.rerun()
     with col_clear2:
-        if st.button("🗑️ Clear Pending Orders"):
+        if st.button("🗑️ Clear All Pending Orders"):
             if st.checkbox("Confirm delete ALL pending orders"):
                 clear_all_pending_orders()
-                st.success("Pending orders cleared!")
+                st.success("All pending orders cleared!")
                 st.rerun()
 
     # Display Holdings
     portfolio_df = calculate_portfolio()
     if not portfolio_df.empty:
         st.subheader("Current Holdings")
-        
         styled_df = portfolio_df.style.format({
             "Cost Basis": "${:.2f}",
             "Current Price": lambda x: f"${x:.2f}" if isinstance(x, (int, float)) else str(x),
@@ -299,27 +304,20 @@ with tab2:
             "Unrealized Gain $": lambda x: f"${x:.2f}" if isinstance(x, (int, float)) else str(x),
             "Unrealized Gain %": lambda x: f"{x:.2f}%" if isinstance(x, (int, float)) else str(x)
         })
-        
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
         
-        # Safe total P/L calculation
         numeric_gain = pd.to_numeric(portfolio_df["Unrealized Gain $"], errors='coerce').fillna(0)
         total_gain = numeric_gain.sum()
-        
         st.metric("Total Unrealized P/L", f"${total_gain:,.2f}", delta="")
 
         st.divider()
         col1, col2 = st.columns(2)
-        
         with col1:
             st.subheader("Portfolio Allocation")
-            # Safe sum for chart
             numeric_value = pd.to_numeric(portfolio_df["Current Value"], errors='coerce').fillna(0)
             if numeric_value.sum() > 0:
                 fig_pie = px.pie(portfolio_df, values='Current Value', names='Ticker', title="Allocation by Ticker")
                 st.plotly_chart(fig_pie, use_container_width=True)
-            else:
-                st.info("No valid values for allocation chart yet.")
         
         with col2:
             st.subheader("Gains / Losses")
@@ -329,11 +327,26 @@ with tab2:
                             color_continuous_scale='RdYlGn')
             st.plotly_chart(fig_bar, use_container_width=True)
 
-    # Pending Orders
+    # Pending Orders with Individual Delete
     pending_df = load_pending_orders()
     if not pending_df.empty:
         st.subheader("📋 Pending Orders")
-        st.dataframe(pending_df, use_container_width=True, hide_index=True)
+        
+        for idx, row in pending_df.iterrows():
+            col1, col2, col3 = st.columns([3, 2, 1])
+            with col1:
+                st.write(f"**{row['ticker']}** - {row['order_type']} {row['shares']} shares @ ${row['limit_price']:.2f}")
+            with col2:
+                st.write(f"ID: {row['id']} | Status: {row['status']}")
+            with col3:
+                if st.button("🗑️ Delete", key=f"del_{row['id']}"):
+                    if st.checkbox(f"Confirm delete order {row['id']}?", key=f"conf_{row['id']}"):
+                        delete_pending_order(row['id'])
+                        st.cache_data.clear()
+                        st.success(f"Order {row['id']} deleted!")
+                        st.rerun()
+                    else:
+                        st.warning("Check the box to confirm deletion.")
 
     st.info(f"💰 Available Cash: ${get_cash_balance():,.2f}")
 
