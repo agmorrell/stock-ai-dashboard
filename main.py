@@ -105,7 +105,7 @@ def call_grok(prompt):
         return "❌ Grok API key not found in Streamlit Secrets."
     
     # Updated model - try these one at a time
-    model = ""grok-4.1-fast-reasoning""
+    model = "grok-4.1-fast-reasoning"
     
     try:
         response = requests.post(
