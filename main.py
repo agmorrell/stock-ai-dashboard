@@ -24,8 +24,14 @@ def get_db_connection():
 
 def init_db():
     conn = get_db_connection()
-    conn.execute('''CREATE TABLE IF NOT EXISTS holdings 
-                    (ticker TEXT PRIMARY KEY, shares REAL, cost_basis REAL)''')
+    conn.executescript('''
+        CREATE TABLE IF NOT EXISTS holdings 
+            (ticker TEXT PRIMARY KEY, shares REAL, cost_basis REAL);
+        CREATE TABLE IF NOT EXISTS cash_balance 
+            (id INTEGER PRIMARY KEY CHECK (id=1), cash REAL DEFAULT 0);
+        CREATE TABLE IF NOT EXISTS pending_orders 
+            (id INTEGER PRIMARY KEY, ticker TEXT, order_type TEXT, shares REAL, limit_price REAL, status TEXT DEFAULT 'Pending');
+    ''')
     conn.commit()
     conn.close()
 
@@ -46,6 +52,39 @@ def save_holding(ticker, shares, cost_basis):
 def clear_all_holdings():
     conn = get_db_connection()
     conn.execute("DELETE FROM holdings")
+    conn.execute("DELETE FROM pending_orders")
+    conn.commit()
+    conn.close()
+
+def get_cash_balance():
+    init_db()
+    conn = get_db_connection()
+    row = conn.execute("SELECT cash FROM cash_balance WHERE id=1").fetchone()
+    conn.close()
+    return row['cash'] if row else 0.0
+
+def update_cash_balance(new_cash):
+    conn = get_db_connection()
+    conn.execute("REPLACE INTO cash_balance (id, cash) VALUES (1, ?)", (new_cash,))
+    conn.commit()
+    conn.close()
+
+def add_pending_order(ticker, order_type, shares, limit_price):
+    conn = get_db_connection()
+    conn.execute("""INSERT INTO pending_orders (ticker, order_type, shares, limit_price) 
+                    VALUES (?, ?, ?, ?)""", (ticker.upper(), order_type, shares, limit_price))
+    conn.commit()
+    conn.close()
+
+def load_pending_orders():
+    conn = get_db_connection()
+    df = pd.read_sql_query("SELECT * FROM pending_orders", conn)
+    conn.close()
+    return df
+
+def clear_all_pending_orders():
+    conn = get_db_connection()
+    conn.execute("DELETE FROM pending_orders")
     conn.commit()
     conn.close()
 
@@ -99,7 +138,7 @@ def call_grok(prompt):
     if not api_key:
         return "❌ Grok API key not found in Streamlit Secrets."
     
-    model = "grok-4-1-fast-reasoning"
+    model = "grok-4.1-fast-reasoning"
     
     try:
         response = requests.post(
@@ -109,9 +148,9 @@ def call_grok(prompt):
                 "model": model,
                 "messages": [{"role": "user", "content": prompt}],
                 "temperature": 0.7,
-                "max_tokens": 6000
+                "max_tokens": 7000   # Increased for more detailed combined response
             },
-            timeout=120
+            timeout=150
         )
         
         if response.status_code != 200:
@@ -122,45 +161,53 @@ def call_grok(prompt):
     except Exception as e:
         return f"❌ Request Error: {str(e)}"
 
-# ----------------- COMBINED FULL ANALYSIS -----------------
+# ----------------- COMBINED FULL ANALYSIS (Now Includes Cash + Pending Orders) -----------------
 def run_full_analysis():
     today = datetime.now().strftime("%B %d, %Y")
     
     portfolio_df = calculate_portfolio()
+    cash = get_cash_balance()
+    pending_df = load_pending_orders()
+    
     portfolio_text = portfolio_df.to_string(index=False) if not portfolio_df.empty else "No holdings yet."
+    pending_text = pending_df.to_string(index=False) if not pending_df.empty else "No pending orders."
     
     prompt = f"""You are a professional market analyst and portfolio manager. Today's date is {today}.
 
-Provide a **comprehensive daily report** that combines market analysis with personalized portfolio advice.
+Provide a **comprehensive daily report** including cash and pending orders.
+
+**Current Portfolio Snapshot:**
+Cash Available: ${cash:,.2f}
+Holdings:
+{portfolio_text}
+Pending Orders:
+{pending_text}
 
 **Part 1: Market Overview**
 1. Identify stock sectors with the highest short-term momentum and explain why.
-2. Build a high-probability watchlist: 10 stocks with strong volatility, volume, and catalyst potential for active traders.
-3. Create 5 actionable day trading setups with specific entry zones, stop losses, and profit targets.
-4. Suggest a capital management / risk strategy for aggressive gains while limiting downside.
-5. List upcoming earnings, macro events, or news catalysts that could move stocks this week.
+2. Build a high-probability watchlist: 10 stocks with volatility, volume, and catalyst potential.
+3. Create 5 actionable day trading setups with entry zones, stop losses, and profit targets.
+4. Suggest a capital management strategy for aggressive gains while limiting downside.
+5. List upcoming earnings, macro events, or news catalysts this week.
 
-**Part 2: Personalized Portfolio Analysis & Recommendations**
-My current portfolio:
-{portfolio_text}
+**Part 2: Personalized Recommendations (Using Cash + Pending Orders)**
+For each holding and new opportunities:
+- **Buy / Sell / Hold / Trim / Add** recommendation
+- Specific entry or exit price zones or technical triggers
+- How much to buy/sell (use available cash wisely, suggest % of cash or shares)
+- Diversification suggestions (e.g., rotate from one sector to Energy/Industrials)
+- Reasoning tied to momentum, catalysts, risk, and your cash position
+- Risk level (Low/Medium/High) and stop-loss ideas
 
-For each existing holding and potential new opportunities:
-- Give a clear **Buy / Sell / Hold / Trim / Add** recommendation
-- Suggest **specific entry or exit price zones** or technical triggers
-- State **how much** to buy or sell (e.g., "Trim 25% of position", "Add 15-20 shares", "% of total portfolio", or dollar amount)
-- Recommend **diversification moves** (e.g., rotate capital from Tech into Energy or Industrials)
-- Provide clear reasoning tied to current momentum, valuation, catalysts, and risk
-- Assign a risk level (Low / Medium / High) and suggest stop-loss ideas
+**Overall Strategy**
+- How to deploy available cash effectively
+- What to do with pending orders (keep, modify, cancel?)
+- Rebalancing summary and suggested new positions
+- How to compound gains responsibly
 
-**Overall Portfolio Strategy**
-- Rebalancing summary: What percentage should be in hot momentum sectors vs defensive plays?
-- Suggested new positions or watchlist stocks for entry
-- How to compound daily gains responsibly into long-term growth
-- Risk management notes for aggressive but sustainable growth
+Be detailed, realistic, and actionable. Use clear headings and bullet points."""
 
-Be detailed, realistic, and actionable. Use clear headings, bullet points, and sections for easy reading."""
-
-    with st.spinner("Generating full daily market analysis + personalized portfolio recommendations..."):
+    with st.spinner("Generating full analysis including cash and pending orders..."):
         result = call_grok(prompt)
         st.session_state.full_analysis = result
         return result
@@ -170,11 +217,11 @@ with st.sidebar:
     st.header("Controls")
     if st.button("🔥 Run Full Daily Analysis + Portfolio Advice", type="primary"):
         run_full_analysis()
-        st.success("✅ Full analysis with portfolio recommendations ready!")
+        st.success("✅ Full analysis ready (includes cash & pending orders)!")
     
     if st.button("🔄 Refresh Portfolio Prices"):
         st.cache_data.clear()
-        st.success("Portfolio prices refreshed!")
+        st.success("Prices refreshed!")
 
 # ----------------- TABS -----------------
 tab1, tab2 = st.tabs(["📈 Full Analysis", "💼 My Portfolio"])
@@ -184,45 +231,73 @@ with tab1:
     if "full_analysis" in st.session_state:
         st.markdown(st.session_state.full_analysis)
     else:
-        st.info("Click the big button in the sidebar to generate today's comprehensive report.")
+        st.info("Click the big button in the sidebar for today's full report.")
 
 with tab2:
     st.header("Portfolio Tracker")
     
-    # Add or Update Holding
+    # Cash Balance
+    st.subheader("💰 Cash Balance")
+    current_cash = get_cash_balance()
+    new_cash = st.number_input("Update Cash Available ($)", min_value=0.0, value=current_cash, step=100.0)
+    if st.button("Update Cash Balance"):
+        update_cash_balance(new_cash)
+        st.success(f"Cash balance updated to ${new_cash:,.2f}")
+        st.rerun()
+
+    st.divider()
+
+    # Add Holding
     with st.expander("➕ Add or Update Holding"):
         col1, col2, col3 = st.columns(3)
         with col1:
-            ticker = st.text_input("Ticker Symbol", placeholder="AAPL").upper()
+            ticker = st.text_input("Ticker Symbol", placeholder="AAPL", key="hold_ticker").upper()
         with col2:
-            shares = st.number_input("Number of Shares", min_value=0.01, value=10.0)
+            shares = st.number_input("Shares", min_value=0.01, value=10.0, key="hold_shares")
         with col3:
-            cost = st.number_input("Cost Basis per Share ($)", min_value=0.01, value=150.0)
-        
-        if st.button("Save Holding", type="primary"):
-            if ticker and shares > 0 and cost > 0:
+            cost = st.number_input("Cost Basis per Share ($)", min_value=0.01, value=150.0, key="hold_cost")
+        if st.button("Save Holding", type="primary", key="save_hold"):
+            if ticker:
                 save_holding(ticker, shares, cost)
                 st.cache_data.clear()
-                st.success(f"✅ {ticker} saved successfully!")
-                time.sleep(0.8)
+                st.success(f"✅ {ticker} saved!")
                 st.rerun()
-            else:
-                st.error("Please fill in all fields correctly.")
-    
-    # NEW: Clear Portfolio Button
-    if st.button("🗑️ Clear All Portfolio Data", type="secondary"):
-        if st.checkbox("⚠️ I confirm I want to permanently delete ALL holdings"):
-            clear_all_holdings()
-            st.cache_data.clear()
-            st.success("✅ All portfolio data has been cleared!")
-            time.sleep(1.0)
-            st.rerun()
-        else:
-            st.warning("Please check the confirmation box to clear all data.")
-    
-    # Display Portfolio
+
+    # Pending Orders
+    with st.expander("📋 Add Pending Order"):
+        col1, col2 = st.columns(2)
+        with col1:
+            po_ticker = st.text_input("Ticker", placeholder="NVDA", key="po_ticker").upper()
+            po_type = st.selectbox("Order Type", ["Buy", "Sell"], key="po_type")
+        with col2:
+            po_shares = st.number_input("Shares", min_value=0.01, value=10.0, key="po_shares")
+            po_price = st.number_input("Limit Price ($)", min_value=0.01, value=150.0, key="po_price")
+        if st.button("Add Pending Order", type="primary", key="add_po"):
+            if po_ticker:
+                add_pending_order(po_ticker, po_type, po_shares, po_price)
+                st.success(f"✅ Pending {po_type} order for {po_ticker} added!")
+                st.rerun()
+
+    # Clear Buttons
+    col_clear1, col_clear2 = st.columns(2)
+    with col_clear1:
+        if st.button("🗑️ Clear All Holdings", type="secondary"):
+            if st.checkbox("Confirm delete ALL holdings"):
+                clear_all_holdings()
+                st.cache_data.clear()
+                st.success("All holdings cleared!")
+                st.rerun()
+    with col_clear2:
+        if st.button("🗑️ Clear Pending Orders"):
+            if st.checkbox("Confirm delete ALL pending orders"):
+                clear_all_pending_orders()
+                st.success("All pending orders cleared!")
+                st.rerun()
+
+    # Display Current Portfolio
     portfolio_df = calculate_portfolio()
     if not portfolio_df.empty:
+        st.subheader("Current Holdings")
         st.dataframe(portfolio_df.style.format({
             "Current Price": "${:.2f}",
             "Current Value": "${:.2f}",
@@ -237,25 +312,24 @@ with tab2:
         
         st.divider()
         col1, col2 = st.columns(2)
-        
         with col1:
             st.subheader("Portfolio Allocation")
             if portfolio_df["Current Value"].sum() > 0:
                 fig_pie = px.pie(portfolio_df, values='Current Value', names='Ticker', title="Allocation by Ticker")
                 st.plotly_chart(fig_pie, use_container_width=True)
-        
         with col2:
             st.subheader("Gains / Losses")
-            fig_bar = px.bar(
-                portfolio_df, 
-                x='Ticker', 
-                y='Unrealized Gain $', 
-                title="Unrealized Profit/Loss by Position",
-                color='Unrealized Gain %',
-                color_continuous_scale='RdYlGn'
-            )
+            fig_bar = px.bar(portfolio_df, x='Ticker', y='Unrealized Gain $', 
+                            title="Unrealized Profit/Loss", color='Unrealized Gain %',
+                            color_continuous_scale='RdYlGn')
             st.plotly_chart(fig_bar, use_container_width=True)
-    else:
-        st.info("No holdings yet. Add some using the form above.")
 
-st.caption("Built with Streamlit + yfinance + Grok API • For educational use only • Trade responsibly")
+    # Display Pending Orders
+    pending_df = load_pending_orders()
+    if not pending_df.empty:
+        st.subheader("📋 Pending Orders")
+        st.dataframe(pending_df, use_container_width=True, hide_index=True)
+
+    st.info(f"💰 Available Cash: ${get_cash_balance():,.2f}")
+
+st.caption("Built with Streamlit + yfinance + Grok API • Educational use only")
