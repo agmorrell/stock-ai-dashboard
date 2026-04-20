@@ -73,7 +73,11 @@ def calculate_portfolio():
 def call_grok(prompt):
     api_key = os.environ.get("GROK_API_KEY")
     if not api_key:
-        return "❌ Grok API key not found in Secrets."
+        return "❌ Grok API key not found in Streamlit Secrets."
+    
+    # Updated model - try these one at a time
+    model = "grok-4.1-fast"          # Cheaper & fast option (recommended first)
+    # model = "grok-4.20-0309-non-reasoning"   # Alternative if above fails
     
     try:
         response = requests.post(
@@ -83,17 +87,25 @@ def call_grok(prompt):
                 "Content-Type": "application/json"
             },
             json={
-                "model": "grok-4",  # or "grok-3" if you prefer
+                "model": model,
                 "messages": [{"role": "user", "content": prompt}],
                 "temperature": 0.7,
                 "max_tokens": 4000
             },
-            timeout=60
+            timeout=90
         )
-        response.raise_for_status()
-        return response.json()['choices'][0]['message']['content']
-    except Exception as e:
-        return f"❌ API Error: {str(e)}"
+        
+        if response.status_code != 200:
+            error_detail = response.text[:500]  # Show more info
+            return f"❌ API Error {response.status_code}: {error_detail}"
+        
+        data = response.json()
+        return data['choices'][0]['message']['content']
+    
+    except requests.exceptions.RequestException as e:
+        return f"❌ Request Error: {str(e)}"
+    except (KeyError, IndexError, json.JSONDecodeError) as e:
+        return f"❌ Response parsing error: {str(e)}\nRaw response: {response.text[:300]}"
 
 # ----------------- DAILY ANALYSIS -----------------
 def run_daily_analysis():
