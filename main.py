@@ -93,7 +93,7 @@ def call_grok(prompt):
     if not api_key:
         return "❌ Grok API key not found in Streamlit Secrets."
     
-    model = "grok-4.1-fast-reasoning"   # Fast & reliable for daily use
+    model = "grok-4-1-fast-reasoning"   # Fast & reliable for daily use
     
     try:
         response = requests.post(
