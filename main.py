@@ -1,16 +1,14 @@
 import appdirs as ad
-ad.user_cache_dir = lambda *args: "/tmp"   # Critical fix for Streamlit Cloud + yfinance
+ad.user_cache_dir = lambda *args: "/tmp"
 
 import streamlit as st
 import pandas as pd
-import yfinance as yf
 from yfinance import Ticker
 import plotly.express as px
 import requests
 import os
 import time
 import random
-import json
 import sqlite3
 from datetime import datetime
 
@@ -45,8 +43,8 @@ def save_holding(ticker, shares, cost_basis):
     conn.commit()
     conn.close()
 
-# ----------------- PORTFOLIO CALCULATION (with cache & rate-limit protection) -----------------
-@st.cache_data(ttl=300)  # Cache for 5 minutes
+# ----------------- PORTFOLIO (with cache) -----------------
+@st.cache_data(ttl=300)
 def calculate_portfolio():
     df = load_holdings()
     if df.empty:
@@ -56,13 +54,11 @@ def calculate_portfolio():
     for _, row in df.iterrows():
         ticker_symbol = row['ticker']
         try:
-            time.sleep(random.uniform(0.6, 1.2))  # Gentle delay to avoid rate limits
-            
+            time.sleep(random.uniform(0.6, 1.2))
             ticker = Ticker(ticker_symbol)
             info = ticker.info
-            
             current_price = (info.get('currentPrice') or info.get('regularMarketPrice') or 
-                            info.get('previousClose') or info.get('regularMarketPreviousClose', 0))
+                            info.get('previousClose') or 0)
             
             current_value = row['shares'] * current_price
             cost = row['shares'] * row['cost_basis']
@@ -78,7 +74,7 @@ def calculate_portfolio():
                 'Unrealized Gain $': round(gain_dollar, 2),
                 'Unrealized Gain %': round(gain_pct, 2)
             })
-        except Exception as e:
+        except Exception:
             data.append({
                 'Ticker': ticker_symbol,
                 'Shares': row['shares'],
@@ -88,27 +84,21 @@ def calculate_portfolio():
                 'Unrealized Gain $': "N/A",
                 'Unrealized Gain %': "N/A"
             })
-            st.warning(f"Could not fetch {ticker_symbol} — will retry soon.")
     
     return pd.DataFrame(data)
 
-# ----------------- GROK API CALL (updated for 2026) -----------------
+# ----------------- GROK API -----------------
 def call_grok(prompt):
     api_key = os.environ.get("GROK_API_KEY")
     if not api_key:
         return "❌ Grok API key not found in Streamlit Secrets."
     
-    # Recommended model for daily use (fast + good quality)
-    model = "grok-4.1-fast-reasoning"
-    # Alternative powerful model: "grok-4.20-0309-non-reasoning"
+    model = "grok-4.1-fast-reasoning"   # Fast & reliable for daily use
     
     try:
         response = requests.post(
             "https://api.x.ai/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json"
-            },
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
             json={
                 "model": model,
                 "messages": [{"role": "user", "content": prompt}],
@@ -119,11 +109,9 @@ def call_grok(prompt):
         )
         
         if response.status_code != 200:
-            error_detail = response.text[:600]
-            return f"❌ API Error {response.status_code}: {error_detail}"
+            return f"❌ API Error {response.status_code}: {response.text[:500]}"
         
-        data = response.json()
-        return data['choices'][0]['message']['content']
+        return response.json()['choices'][0]['message']['content']
     
     except Exception as e:
         return f"❌ Request Error: {str(e)}"
@@ -133,18 +121,17 @@ def run_daily_analysis():
     today = datetime.now().strftime("%B %d, %Y")
     prompt = f"""You are a professional market analyst. Today's date is {today}.
 
-Run this full analysis in today's market:
+Run this full analysis:
+1. Identify stock sectors with highest short-term momentum and why.
+2. 10-stock high-probability watchlist with volatility, volume, catalyst potential.
+3. 5 day trading setups with entry, stop loss, profit targets.
+4. Capital management strategy for aggressive gains with limited downside.
+5. Upcoming earnings, macro events, or news this week.
+6. How to compound daily gains responsibly.
 
-1. Identify stock sectors with the highest short-term momentum and explain why.
-2. Build a high-probability watchlist: Give me 10 stocks with volatility, volume, and catalyst potential for active traders.
-3. Create 5 day trading setups with entry zones, stop losses, and profit targets.
-4. Create a capital management strategy to target aggressive gains while limiting downside.
-5. Find upcoming earnings, macro events, or news that could move stocks this week.
-6. Show how to compound daily gains responsibly into long-term capital growth.
+Be concise, actionable, use real-time context. Use clear headings."""
 
-Be concise, actionable, and use real-time market context. Format with clear headings and bullet points."""
-    
-    with st.spinner("Calling Grok for today's full market analysis..."):
+    with st.spinner("Generating today's market analysis..."):
         result = call_grok(prompt)
         st.session_state.daily_results = result
         return result
@@ -156,9 +143,8 @@ with st.sidebar:
         run_daily_analysis()
         st.success("✅ Daily report ready!")
     
-    st.divider()
     if st.button("🔄 Refresh Portfolio Prices"):
-        st.cache_data.clear()  # Force refresh of cached prices
+        st.cache_data.clear()
         st.success("Prices refreshed!")
 
 # ----------------- TABS -----------------
@@ -174,22 +160,19 @@ with tab1:
 with tab2:
     st.header("Portfolio Tracker")
     
-    # Add/Edit Holding
     with st.expander("➕ Add or Update Holding"):
         col1, col2, col3 = st.columns(3)
         with col1:
-            ticker = st.text_input("Ticker Symbol", placeholder="AAPL").upper()
+            ticker = st.text_input("Ticker", placeholder="AAPL").upper()
         with col2:
-            shares = st.number_input("Number of Shares", min_value=0.01, value=10.0)
+            shares = st.number_input("Shares", min_value=0.01, value=10.0)
         with col3:
             cost = st.number_input("Cost Basis per Share ($)", min_value=0.01, value=150.0)
-        
         if st.button("Save Holding"):
             save_holding(ticker, shares, cost)
-            st.success(f"✅ {ticker} saved!")
+            st.success(f"{ticker} saved!")
             st.rerun()
     
-    # Display Portfolio with Charts
     portfolio_df = calculate_portfolio()
     if not portfolio_df.empty:
         st.dataframe(portfolio_df.style.format({
@@ -204,20 +187,35 @@ with tab2:
         st.metric("Total Unrealized P/L", f"${total_gain:,.2f}", 
                   delta=f"{(total_gain/total_cost*100):.2f}%" if total_cost > 0 else "0%")
         
-        # Visuals
         st.divider()
         col1, col2 = st.columns(2)
         
         with col1:
             st.subheader("Portfolio Allocation")
             if portfolio_df["Current Value"].sum() > 0:
-                fig_pie = px.pie(portfolio_df, values='Current Value', names='Ticker', 
-                                title="Allocation by Ticker")
+                fig_pie = px.pie(portfolio_df, values='Current Value', names='Ticker', title="Allocation by Ticker")
                 st.plotly_chart(fig_pie, use_container_width=True)
-            else:
-                st.info("Add holdings to see allocation chart.")
         
         with col2:
             st.subheader("Gains / Losses")
-            fig_bar = px.bar(portfolio_df, x='Ticker', y='Unrealized Gain $', 
-                            title="Unrealized Profit/L
+            fig_bar = px.bar(
+                portfolio_df, 
+                x='Ticker', 
+                y='Unrealized Gain $', 
+                title="Unrealized Profit/Loss by Position",
+                color='Unrealized Gain %',
+                color_continuous_scale='RdYlGn'
+            )
+            st.plotly_chart(fig_bar, use_container_width=True)
+        
+        if st.button("🤖 Get AI Buy/Sell Recommendations"):
+            portfolio_text = portfolio_df.to_string(index=False)
+            suggestion_prompt = f"Analyze this portfolio and suggest buy/sell/hold actions with reasoning:\n\n{portfolio_text}"
+            with st.spinner("Analyzing..."):
+                suggestions = call_grok(suggestion_prompt)
+                st.subheader("🤖 AI Recommendations")
+                st.markdown(suggestions)
+    else:
+        st.info("No holdings yet. Add some above.")
+
+st.caption("Built with Streamlit + yfinance + Grok API • Trade responsibly")
