@@ -1,21 +1,24 @@
 import appdirs as ad
-ad.user_cache_dir = lambda *args: "/tmp"   # Critical for Streamlit Cloud
+ad.user_cache_dir = lambda *args: "/tmp"   # Critical fix for Streamlit Cloud + yfinance
 
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 import yfinance as yf
-from datetime import datetime
-import json
-import sqlite3
+from yfinance import Ticker
+import plotly.express as px
 import requests
 import os
+import time
+import random
+import json
+import sqlite3
+from datetime import datetime
 
 st.set_page_config(page_title="AI Stock Dashboard", layout="wide")
 st.title("🚀 My Personal AI Stock Dashboard")
 st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M %p EST')}")
 
-# ----------------- HELPER FUNCTIONS -----------------
+# ----------------- DATABASE -----------------
 def get_db_connection():
     conn = sqlite3.connect('portfolio.db')
     conn.row_factory = sqlite3.Row
@@ -42,10 +45,8 @@ def save_holding(ticker, shares, cost_basis):
     conn.commit()
     conn.close()
 
-import time
-import random
-from yfinance import Ticker
-
+# ----------------- PORTFOLIO CALCULATION (with cache & rate-limit protection) -----------------
+@st.cache_data(ttl=300)  # Cache for 5 minutes
 def calculate_portfolio():
     df = load_holdings()
     if df.empty:
@@ -55,17 +56,13 @@ def calculate_portfolio():
     for _, row in df.iterrows():
         ticker_symbol = row['ticker']
         try:
-            # Small random delay to avoid hammering Yahoo
-            time.sleep(random.uniform(0.8, 1.5))
+            time.sleep(random.uniform(0.6, 1.2))  # Gentle delay to avoid rate limits
             
             ticker = Ticker(ticker_symbol)
             info = ticker.info
             
-            current_price = info.get('currentPrice') or info.get('regularMarketPrice') or \
-                           info.get('previousClose') or info.get('regularMarketPreviousClose', 0)
-            
-            if current_price == 0:
-                current_price = 0  # fallback
+            current_price = (info.get('currentPrice') or info.get('regularMarketPrice') or 
+                            info.get('previousClose') or info.get('regularMarketPreviousClose', 0))
             
             current_value = row['shares'] * current_price
             cost = row['shares'] * row['cost_basis']
@@ -81,31 +78,29 @@ def calculate_portfolio():
                 'Unrealized Gain $': round(gain_dollar, 2),
                 'Unrealized Gain %': round(gain_pct, 2)
             })
-            
-        except Exception as e:  # Catch rate limit and other yfinance errors
+        except Exception as e:
             data.append({
                 'Ticker': ticker_symbol,
                 'Shares': row['shares'],
                 'Cost Basis': round(row['cost_basis'], 2),
-                'Current Price': "Error",
+                'Current Price': "N/A",
                 'Current Value': "N/A",
                 'Unrealized Gain $': "N/A",
                 'Unrealized Gain %': "N/A"
             })
-            st.warning(f"Could not fetch data for {ticker_symbol}: {str(e)[:100]}...")
+            st.warning(f"Could not fetch {ticker_symbol} — will retry soon.")
     
     return pd.DataFrame(data)
 
-
-
-# ----------------- GROK API CALL -----------------
+# ----------------- GROK API CALL (updated for 2026) -----------------
 def call_grok(prompt):
     api_key = os.environ.get("GROK_API_KEY")
     if not api_key:
         return "❌ Grok API key not found in Streamlit Secrets."
     
-    # Updated model - try these one at a time
+    # Recommended model for daily use (fast + good quality)
     model = "grok-4.1-fast-reasoning"
+    # Alternative powerful model: "grok-4.20-0309-non-reasoning"
     
     try:
         response = requests.post(
@@ -124,16 +119,14 @@ def call_grok(prompt):
         )
         
         if response.status_code != 200:
-            error_detail = response.text[:500]  # Show more info
+            error_detail = response.text[:600]
             return f"❌ API Error {response.status_code}: {error_detail}"
         
         data = response.json()
         return data['choices'][0]['message']['content']
     
-    except requests.exceptions.RequestException as e:
+    except Exception as e:
         return f"❌ Request Error: {str(e)}"
-    except (KeyError, IndexError, json.JSONDecodeError) as e:
-        return f"❌ Response parsing error: {str(e)}\nRaw response: {response.text[:300]}"
 
 # ----------------- DAILY ANALYSIS -----------------
 def run_daily_analysis():
@@ -164,9 +157,9 @@ with st.sidebar:
         st.success("✅ Daily report ready!")
     
     st.divider()
-    st.write("**Portfolio Tools**")
-    if st.button("🤖 Get AI Buy/Sell Suggestions"):
-        st.session_state.show_suggestions = True
+    if st.button("🔄 Refresh Portfolio Prices"):
+        st.cache_data.clear()  # Force refresh of cached prices
+        st.success("Prices refreshed!")
 
 # ----------------- TABS -----------------
 tab1, tab2 = st.tabs(["📈 Daily Opportunities", "💼 My Portfolio"])
@@ -196,7 +189,7 @@ with tab2:
             st.success(f"✅ {ticker} saved!")
             st.rerun()
     
-       # Display Portfolio
+    # Display Portfolio with Charts
     portfolio_df = calculate_portfolio()
     if not portfolio_df.empty:
         st.dataframe(portfolio_df.style.format({
@@ -211,55 +204,20 @@ with tab2:
         st.metric("Total Unrealized P/L", f"${total_gain:,.2f}", 
                   delta=f"{(total_gain/total_cost*100):.2f}%" if total_cost > 0 else "0%")
         
-        # === NEW: Simple Visuals (Charts) ===
+        # Visuals
         st.divider()
         col1, col2 = st.columns(2)
         
         with col1:
             st.subheader("Portfolio Allocation")
-            if "Current Value" in portfolio_df.columns and portfolio_df["Current Value"].sum() > 0:
-                fig_pie = px.pie(
-                    portfolio_df, 
-                    values='Current Value', 
-                    names='Ticker', 
-                    title="Allocation by Ticker"
-                )
+            if portfolio_df["Current Value"].sum() > 0:
+                fig_pie = px.pie(portfolio_df, values='Current Value', names='Ticker', 
+                                title="Allocation by Ticker")
                 st.plotly_chart(fig_pie, use_container_width=True)
             else:
-                st.info("Add holdings with positive value to see allocation chart.")
+                st.info("Add holdings to see allocation chart.")
         
         with col2:
             st.subheader("Gains / Losses")
-            fig_bar = px.bar(
-                portfolio_df, 
-                x='Ticker', 
-                y='Unrealized Gain $', 
-                title="Unrealized Profit/Loss by Position",
-                color='Unrealized Gain %',
-                color_continuous_scale='RdYlGn'  # Green = profit, Red = loss
-            )
-            st.plotly_chart(fig_bar, use_container_width=True)
-    else:
-        st.info("No holdings yet. Add some using the form above.")
-
-    # AI Suggestions
-    if st.button("🤖 Get AI Buy/Sell/Hold Recommendations") or st.session_state.get("show_suggestions", False):
-        if not portfolio_df.empty:
-            portfolio_text = portfolio_df.to_string(index=False)
-            suggestion_prompt = f"""Analyze this portfolio and give specific buy, sell, or hold recommendations.
-
-Portfolio:
-{portfolio_text}
-
-Today's top momentum sectors and watchlist (from earlier analysis): [Insert latest if available, otherwise use general knowledge]
-
-Give clear actions with reasoning, risk levels, and suggested position sizes."""
-            
-            with st.spinner("Analyzing your portfolio..."):
-                suggestions = call_grok(suggestion_prompt)
-                st.subheader("🤖 AI Recommendations")
-                st.markdown(suggestions)
-        else:
-            st.warning("Add some holdings first.")
-
-st.caption("Built with Streamlit + yfinance + Grok API on Replit. Trade responsibly — this is for educational use.")
+            fig_bar = px.bar(portfolio_df, x='Ticker', y='Unrealized Gain $', 
+                            title="Unrealized Profit/L
