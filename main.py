@@ -43,7 +43,7 @@ def save_holding(ticker, shares, cost_basis):
     conn.commit()
     conn.close()
 
-# ----------------- PORTFOLIO (with cache) -----------------
+# ----------------- PORTFOLIO CALCULATION -----------------
 @st.cache_data(ttl=300)
 def calculate_portfolio():
     df = load_holdings()
@@ -87,13 +87,13 @@ def calculate_portfolio():
     
     return pd.DataFrame(data)
 
-# ----------------- GROK API -----------------
+# ----------------- GROK API CALL -----------------
 def call_grok(prompt):
     api_key = os.environ.get("GROK_API_KEY")
     if not api_key:
         return "❌ Grok API key not found in Streamlit Secrets."
     
-    model = "grok-4-1-fast-reasoning"   # Fast & reliable for daily use
+    model = "grok-4-1-fast-reasoning"   # Fast and cost-effective for detailed analysis
     
     try:
         response = requests.post(
@@ -103,59 +103,82 @@ def call_grok(prompt):
                 "model": model,
                 "messages": [{"role": "user", "content": prompt}],
                 "temperature": 0.7,
-                "max_tokens": 4000
+                "max_tokens": 6000
             },
-            timeout=90
+            timeout=120
         )
         
         if response.status_code != 200:
-            return f"❌ API Error {response.status_code}: {response.text[:500]}"
+            return f"❌ API Error {response.status_code}: {response.text[:600]}"
         
         return response.json()['choices'][0]['message']['content']
     
     except Exception as e:
         return f"❌ Request Error: {str(e)}"
 
-# ----------------- DAILY ANALYSIS -----------------
-def run_daily_analysis():
+# ----------------- COMBINED FULL ANALYSIS + PORTFOLIO ADVICE -----------------
+def run_full_analysis():
     today = datetime.now().strftime("%B %d, %Y")
-    prompt = f"""You are a professional market analyst. Today's date is {today}.
+    
+    portfolio_df = calculate_portfolio()
+    portfolio_text = portfolio_df.to_string(index=False) if not portfolio_df.empty else "No holdings yet."
+    
+    prompt = f"""You are a professional market analyst and portfolio manager. Today's date is {today}.
 
-Run this full analysis:
-1. Identify stock sectors with highest short-term momentum and why.
-2. 10-stock high-probability watchlist with volatility, volume, catalyst potential.
-3. 5 day trading setups with entry, stop loss, profit targets.
-4. Capital management strategy for aggressive gains with limited downside.
-5. Upcoming earnings, macro events, or news this week.
-6. How to compound daily gains responsibly.
+Provide a **comprehensive daily report** that combines market analysis with personalized portfolio advice.
 
-Be concise, actionable, use real-time context. Use clear headings."""
+**Part 1: Market Overview**
+1. Identify stock sectors with the highest short-term momentum and explain why.
+2. Build a high-probability watchlist: 10 stocks with strong volatility, volume, and catalyst potential for active traders.
+3. Create 5 actionable day trading setups with specific entry zones, stop losses, and profit targets.
+4. Suggest a capital management / risk strategy for aggressive gains while limiting downside.
+5. List upcoming earnings, macro events, or news catalysts that could move stocks this week.
 
-    with st.spinner("Generating today's market analysis..."):
+**Part 2: Personalized Portfolio Analysis & Recommendations**
+My current portfolio:
+{portfolio_text}
+
+For each existing holding and potential new opportunities:
+- Give a clear **Buy / Sell / Hold / Trim / Add** recommendation
+- Suggest **specific entry or exit price zones** or technical triggers
+- State **how much** to buy or sell (e.g., "Trim 25% of position", "Add 15-20 shares", "% of total portfolio", or dollar amount)
+- Recommend **diversification moves** (e.g., rotate capital from Tech into Energy or Industrials)
+- Provide clear reasoning tied to current momentum, valuation, catalysts, and risk
+- Assign a risk level (Low / Medium / High) and suggest stop-loss ideas
+
+**Overall Portfolio Strategy**
+- Rebalancing summary: What percentage should be in hot momentum sectors vs defensive plays?
+- Suggested new positions or watchlist stocks for entry
+- How to compound daily gains responsibly into long-term growth
+- Risk management notes for aggressive but sustainable growth
+
+Be detailed, realistic, and actionable. Use clear headings, bullet points, and sections for easy reading."""
+
+    with st.spinner("Generating full daily market analysis + personalized portfolio recommendations..."):
         result = call_grok(prompt)
-        st.session_state.daily_results = result
+        st.session_state.full_analysis = result
         return result
 
 # ----------------- SIDEBAR -----------------
 with st.sidebar:
     st.header("Controls")
-    if st.button("🔄 Run Today's Full Market Analysis", type="primary"):
-        run_daily_analysis()
-        st.success("✅ Daily report ready!")
+    if st.button("🔥 Run Full Daily Analysis + Portfolio Advice", type="primary"):
+        run_full_analysis()
+        st.success("✅ Full analysis with portfolio recommendations ready!")
     
     if st.button("🔄 Refresh Portfolio Prices"):
         st.cache_data.clear()
-        st.success("Prices refreshed!")
+        st.success("Portfolio prices refreshed!")
 
 # ----------------- TABS -----------------
-tab1, tab2 = st.tabs(["📈 Daily Opportunities", "💼 My Portfolio"])
+tab1, tab2 = st.tabs(["📈 Full Analysis", "💼 My Portfolio"])
 
 with tab1:
-    st.header("Daily Market Analyst Report")
-    if "daily_results" in st.session_state:
-        st.markdown(st.session_state.daily_results)
+    st.header("Full Daily Market + Portfolio Analysis")
+    if "full_analysis" in st.session_state:
+        st.markdown(st.session_state.full_analysis)
     else:
-        st.info("Click the button in the sidebar to generate today's report.")
+        st.info("Click the big button in the sidebar to generate today's comprehensive report.")
 
 with tab2:
     st.header("Portfolio Tracker")
@@ -172,18 +195,13 @@ with tab2:
         if st.button("Save Holding", type="primary"):
             if ticker and shares > 0 and cost > 0:
                 save_holding(ticker, shares, cost)
-                st.cache_data.clear()                    # Force refresh of portfolio cache
-                st.success(f"✅ {ticker} saved successfully! Refreshing portfolio...")
-                time.sleep(0.8)                          # Small pause so user sees the message
-                st.rerun()                               # Still attempt rerun as backup
+                st.cache_data.clear()
+                st.success(f"✅ {ticker} saved successfully!")
+                time.sleep(0.8)
+                st.rerun()
             else:
                 st.error("Please fill in all fields correctly.")
-    # Force cache clear if needed (optional safety)
-    if st.button("🔄 Refresh Portfolio Prices", key="refresh_prices"):
-        st.cache_data.clear()
-        st.success("Portfolio refreshed!")
-        st.rerun()
-        
+    
     portfolio_df = calculate_portfolio()
     if not portfolio_df.empty:
         st.dataframe(portfolio_df.style.format({
@@ -218,31 +236,7 @@ with tab2:
                 color_continuous_scale='RdYlGn'
             )
             st.plotly_chart(fig_bar, use_container_width=True)
-        
-        if st.button("🤖 Get AI Buy/Sell Recommendations"):
-            portfolio_text = portfolio_df.to_string(index=False)
-                suggestion_prompt = f"""You are an experienced market analyst and portfolio advisor. Analyze my current portfolio in detail and provide **specific, actionable recommendations**.
+    else:
+        st.info("No holdings yet. Add some using the form above.")
 
-            My current portfolio:
-            {portfolio_text}
-            
-            Today's market context (use real-time knowledge):
-            - Highest short-term momentum sectors and why
-            - Any relevant catalysts (earnings, macro events, commodity moves like oil)
-            
-            For each holding or new opportunity, give:
-            - **Buy / Sell / Hold / Trim / Add** recommendation
-            - **Specific entry or exit zones** (price levels or technical triggers if applicable)
-            - **How much** to buy or sell (e.g., "Add 20% more capital", "Trim 30% of position", "Sell 50 shares", or "% of portfolio")
-            - **Diversification suggestion**: Where to move capital (e.g., rotate from overvalued Tech into Energy/Industrials/Materials, or add defensive names)
-            - Clear reasoning tied to momentum, valuation, risk, and catalysts
-            - Risk level (Low / Medium / High) and suggested stop-loss ideas
-            
-            Overall portfolio advice:
-            - Rebalancing summary (what % in hot momentum sectors vs defensive)
-            - Suggested new watchlist stocks for entry
-            - Risk management notes for aggressive growth with downside protection
-            
-            Be detailed, realistic, and prioritize high-probability opportunities. Use bullet points and clear sections for readability."""
-
-st.caption("Built with Streamlit + yfinance + Grok API • Trade responsibly")
+st.caption("Built with Streamlit + yfinance + Grok API • For educational use only • Trade responsibly")
