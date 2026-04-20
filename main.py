@@ -93,7 +93,7 @@ def clear_all_pending_orders():
 def calculate_portfolio():
     df = load_holdings()
     if df.empty:
-        return pd.DataFrame(columns=['Ticker', 'Shares', 'Cost Basis', 'Current Price', 'Current Value', 'Unrealized Gain $', 'Unrealized Gain %'])
+        return pd.DataFrame(columns=['Ticker','Shares','Cost Basis','Current Price','Current Value','Unrealized Gain $','Unrealized Gain %'])
     
     data = []
     for _, row in df.iterrows():
@@ -102,8 +102,8 @@ def calculate_portfolio():
             time.sleep(random.uniform(0.6, 1.2))
             ticker = Ticker(ticker_symbol)
             info = ticker.info
-            current_price = (info.get('currentPrice') or info.get('regularMarketPrice') or 
-                            info.get('previousClose') or 0.0)
+            current_price = float(info.get('currentPrice') or info.get('regularMarketPrice') or 
+                                  info.get('previousClose') or 0.0)
             
             current_value = row['shares'] * current_price
             cost = row['shares'] * row['cost_basis']
@@ -112,7 +112,7 @@ def calculate_portfolio():
             
             data.append({
                 'Ticker': ticker_symbol,
-                'Shares': row['shares'],
+                'Shares': round(row['shares'], 4),
                 'Cost Basis': round(row['cost_basis'], 2),
                 'Current Price': round(current_price, 2),
                 'Current Value': round(current_value, 2),
@@ -122,7 +122,7 @@ def calculate_portfolio():
         except Exception:
             data.append({
                 'Ticker': ticker_symbol,
-                'Shares': row['shares'],
+                'Shares': round(row['shares'], 4),
                 'Cost Basis': round(row['cost_basis'], 2),
                 'Current Price': "N/A",
                 'Current Value': "N/A",
@@ -132,7 +132,7 @@ def calculate_portfolio():
     
     return pd.DataFrame(data)
 
-# ----------------- GROK API CALL -----------------
+# ----------------- GROK API -----------------
 def call_grok(prompt):
     api_key = os.environ.get("GROK_API_KEY")
     if not api_key:
@@ -152,19 +152,15 @@ def call_grok(prompt):
             },
             timeout=150
         )
-        
         if response.status_code != 200:
             return f"❌ API Error {response.status_code}: {response.text[:600]}"
-        
         return response.json()['choices'][0]['message']['content']
-    
     except Exception as e:
         return f"❌ Request Error: {str(e)}"
 
-# ----------------- COMBINED FULL ANALYSIS -----------------
+# ----------------- FULL ANALYSIS -----------------
 def run_full_analysis():
     today = datetime.now().strftime("%B %d, %Y")
-    
     portfolio_df = calculate_portfolio()
     cash = get_cash_balance()
     pending_df = load_pending_orders()
@@ -183,29 +179,28 @@ Pending Orders:
 
 **Part 1: Market Overview**
 1. Highest short-term momentum sectors and why.
-2. 10-stock high-probability watchlist with volatility, volume, catalysts.
-3. 5 day trading setups with entry zones, stop losses, profit targets.
-4. Capital management strategy for aggressive gains with limited downside.
-5. Upcoming earnings, macro events, or news this week.
+2. 10-stock high-probability watchlist.
+3. 5 day trading setups with entry, stop loss, profit targets.
+4. Capital management strategy.
+5. Upcoming earnings / macro events this week.
 
 **Part 2: Personalized Recommendations**
-For each holding and opportunities:
-- Buy / Sell / Hold / Trim / Add recommendation
-- Specific entry/exit price zones or triggers
-- How much to buy/sell (consider available cash)
-- Diversification moves
-- Reasoning based on momentum, catalysts, and your cash/pending orders
-- Risk level and stop-loss ideas
+- Buy/Sell/Hold/Trim/Add for each holding
+- Specific entry/exit zones
+- How much to buy or sell (considering cash)
+- Diversification suggestions
+- Reasoning tied to momentum and your cash/pending orders
+- Risk level and stop ideas
 
 **Overall Strategy**
-- Cash deployment suggestions
-- Pending orders advice (keep/modify/cancel)
-- Rebalancing and new position ideas
+- Cash deployment
+- Pending orders advice
+- Rebalancing
 - Compounding plan
 
 Use clear headings and bullet points."""
 
-    with st.spinner("Generating full analysis including cash and pending orders..."):
+    with st.spinner("Generating full analysis..."):
         result = call_grok(prompt)
         st.session_state.full_analysis = result
         return result
@@ -292,12 +287,11 @@ with tab2:
                 st.success("Pending orders cleared!")
                 st.rerun()
 
-    # Display Holdings (Safe formatting)
+    # Display Holdings
     portfolio_df = calculate_portfolio()
     if not portfolio_df.empty:
         st.subheader("Current Holdings")
         
-        # Safe formatting that handles "N/A"
         styled_df = portfolio_df.style.format({
             "Cost Basis": "${:.2f}",
             "Current Price": lambda x: f"${x:.2f}" if isinstance(x, (int, float)) else str(x),
@@ -308,24 +302,24 @@ with tab2:
         
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
         
-        # Safe total calculation
+        # Safe total P/L calculation
         numeric_gain = pd.to_numeric(portfolio_df["Unrealized Gain $"], errors='coerce').fillna(0)
         total_gain = numeric_gain.sum()
         
-        numeric_cost = pd.to_numeric(portfolio_df["Cost Basis"], errors='coerce').fillna(0) * pd.to_numeric(portfolio_df["Shares"], errors='coerce').fillna(0)
-        total_cost = numeric_cost.sum()
-        
-        st.metric("Total Unrealized P/L", f"${total_gain:,.2f}", 
-                  delta=f"{(total_gain/total_cost*100):.2f}%" if total_cost > 0 else "0%")
-        
+        st.metric("Total Unrealized P/L", f"${total_gain:,.2f}", delta="")
+
         st.divider()
         col1, col2 = st.columns(2)
         
         with col1:
             st.subheader("Portfolio Allocation")
-            if portfolio_df["Current Value"].sum() > 0:
+            # Safe sum for chart
+            numeric_value = pd.to_numeric(portfolio_df["Current Value"], errors='coerce').fillna(0)
+            if numeric_value.sum() > 0:
                 fig_pie = px.pie(portfolio_df, values='Current Value', names='Ticker', title="Allocation by Ticker")
                 st.plotly_chart(fig_pie, use_container_width=True)
+            else:
+                st.info("No valid values for allocation chart yet.")
         
         with col2:
             st.subheader("Gains / Losses")
@@ -335,7 +329,7 @@ with tab2:
                             color_continuous_scale='RdYlGn')
             st.plotly_chart(fig_bar, use_container_width=True)
 
-    # Pending Orders Table
+    # Pending Orders
     pending_df = load_pending_orders()
     if not pending_df.empty:
         st.subheader("📋 Pending Orders")
