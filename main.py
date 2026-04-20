@@ -93,7 +93,7 @@ def clear_all_pending_orders():
 def calculate_portfolio():
     df = load_holdings()
     if df.empty:
-        return pd.DataFrame()
+        return pd.DataFrame(columns=['Ticker', 'Shares', 'Cost Basis', 'Current Price', 'Current Value', 'Unrealized Gain $', 'Unrealized Gain %'])
     
     data = []
     for _, row in df.iterrows():
@@ -103,12 +103,12 @@ def calculate_portfolio():
             ticker = Ticker(ticker_symbol)
             info = ticker.info
             current_price = (info.get('currentPrice') or info.get('regularMarketPrice') or 
-                            info.get('previousClose') or 0)
+                            info.get('previousClose') or 0.0)
             
             current_value = row['shares'] * current_price
             cost = row['shares'] * row['cost_basis']
             gain_dollar = current_value - cost
-            gain_pct = (gain_dollar / cost * 100) if cost > 0 else 0
+            gain_pct = (gain_dollar / cost * 100) if cost > 0 else 0.0
             
             data.append({
                 'Ticker': ticker_symbol,
@@ -292,7 +292,7 @@ with tab2:
                 st.success("Pending orders cleared!")
                 st.rerun()
 
-    # Display Holdings (Fixed formatting)
+    # Display Holdings (Safe formatting)
     portfolio_df = calculate_portfolio()
     if not portfolio_df.empty:
         st.subheader("Current Holdings")
@@ -300,16 +300,21 @@ with tab2:
         # Safe formatting that handles "N/A"
         styled_df = portfolio_df.style.format({
             "Cost Basis": "${:.2f}",
-            "Current Price": lambda x: f"${x:.2f}" if isinstance(x, (int, float)) else x,
-            "Current Value": lambda x: f"${x:.2f}" if isinstance(x, (int, float)) else x,
-            "Unrealized Gain $": lambda x: f"${x:.2f}" if isinstance(x, (int, float)) else x,
-            "Unrealized Gain %": lambda x: f"{x:.2f}%" if isinstance(x, (int, float)) else x
+            "Current Price": lambda x: f"${x:.2f}" if isinstance(x, (int, float)) else str(x),
+            "Current Value": lambda x: f"${x:.2f}" if isinstance(x, (int, float)) else str(x),
+            "Unrealized Gain $": lambda x: f"${x:.2f}" if isinstance(x, (int, float)) else str(x),
+            "Unrealized Gain %": lambda x: f"{x:.2f}%" if isinstance(x, (int, float)) else str(x)
         })
         
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
         
-        total_gain = portfolio_df["Unrealized Gain $"].sum()
-        total_cost = (portfolio_df["Shares"] * portfolio_df["Cost Basis"]).sum()
+        # Safe total calculation
+        numeric_gain = pd.to_numeric(portfolio_df["Unrealized Gain $"], errors='coerce').fillna(0)
+        total_gain = numeric_gain.sum()
+        
+        numeric_cost = pd.to_numeric(portfolio_df["Cost Basis"], errors='coerce').fillna(0) * pd.to_numeric(portfolio_df["Shares"], errors='coerce').fillna(0)
+        total_cost = numeric_cost.sum()
+        
         st.metric("Total Unrealized P/L", f"${total_gain:,.2f}", 
                   delta=f"{(total_gain/total_cost*100):.2f}%" if total_cost > 0 else "0%")
         
