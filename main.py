@@ -326,30 +326,26 @@ with tab2:
                             color_continuous_scale='RdYlGn')
             st.plotly_chart(fig_bar, use_container_width=True)
 
-    # ================== PENDING ORDERS WITH TRASH ICON ==================
+    # ================== PENDING ORDERS WITH INSTANT TRASH ICON ==================
     pending_df = load_pending_orders()
     if not pending_df.empty:
         st.subheader("📋 Pending Orders")
         
         for idx, row in pending_df.iterrows():
             with st.container(border=True):
-                col1, col2, col3 = st.columns([4, 3, 1])
+                col1, col2, col3 = st.columns([5, 3, 1])
                 with col1:
                     st.write(f"**{row['ticker']}** — **{row['order_type']}** {row['shares']} shares @ **${row['limit_price']:.2f}**")
                 with col2:
                     st.write(f"ID: {row['id']} | Status: {row['status']}")
                 with col3:
-                    if st.button("🗑️", key=f"delete_{row['id']}", help="Delete this order"):
-                        # Show confirmation inline
-                        if st.checkbox("Confirm delete?", key=f"conf_{row['id']}"):
-                            delete_pending_order(row['id'])
-                            st.cache_data.clear()
-                            st.success(f"Deleted order for {row['ticker']}")
-                            st.rerun()
-                        else:
-                            st.info("Check the box above to confirm deletion.")
+                    if st.button("🗑️", key=f"del_{row['id']}", help="Delete this pending order"):
+                        delete_pending_order(row['id'])
+                        st.cache_data.clear()
+                        st.success(f"✅ Deleted pending order for {row['ticker']}")
+                        st.rerun()   # Immediate refresh
     else:
-        st.info("No pending orders yet.")
+        st.info("No pending orders yet. Add one using the expander above.")
 
     st.info(f"💰 Available Cash: ${get_cash_balance():,.2f}")
 
