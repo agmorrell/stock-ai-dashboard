@@ -3,6 +3,7 @@ ad.user_cache_dir = lambda *args: "/tmp"   # Critical for Streamlit Cloud
 
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 import yfinance as yf
 from datetime import datetime
 import json
@@ -94,6 +95,8 @@ def calculate_portfolio():
             st.warning(f"Could not fetch data for {ticker_symbol}: {str(e)[:100]}...")
     
     return pd.DataFrame(data)
+
+
 
 # ----------------- GROK API CALL -----------------
 def call_grok(prompt):
@@ -196,6 +199,9 @@ with tab2:
     # Display Portfolio
     portfolio_df = calculate_portfolio()
     if not portfolio_df.empty:
+            # Display Portfolio
+    portfolio_df = calculate_portfolio()
+    if not portfolio_df.empty:
         st.dataframe(portfolio_df.style.format({
             "Current Price": "${:.2f}",
             "Current Value": "${:.2f}",
@@ -205,6 +211,39 @@ with tab2:
         
         total_gain = portfolio_df["Unrealized Gain $"].sum()
         total_cost = (portfolio_df["Shares"] * portfolio_df["Cost Basis"]).sum()
+        st.metric("Total Unrealized P/L", f"${total_gain:,.2f}", 
+                  delta=f"{(total_gain/total_cost*100):.2f}%" if total_cost > 0 else "0%")
+        
+        # === NEW: Simple Visuals (Charts) ===
+        st.divider()
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("Portfolio Allocation")
+            if "Current Value" in portfolio_df.columns and portfolio_df["Current Value"].sum() > 0:
+                fig_pie = px.pie(
+                    portfolio_df, 
+                    values='Current Value', 
+                    names='Ticker', 
+                    title="Allocation by Ticker"
+                )
+                st.plotly_chart(fig_pie, use_container_width=True)
+            else:
+                st.info("Add holdings with positive value to see allocation chart.")
+        
+        with col2:
+            st.subheader("Gains / Losses")
+            fig_bar = px.bar(
+                portfolio_df, 
+                x='Ticker', 
+                y='Unrealized Gain $', 
+                title="Unrealized Profit/Loss by Position",
+                color='Unrealized Gain %',
+                color_continuous_scale='RdYlGn'  # Green = profit, Red = loss
+            )
+            st.plotly_chart(fig_bar, use_container_width=True)
+    else:
+        st.info("No holdings yet. Add some using the form above.")
         st.metric("Total Unrealized P/L", f"${total_gain:,.2f}", 
                   delta=f"{(total_gain/total_cost*100):.2f}%" if total_cost > 0 else "0%")
     else:
