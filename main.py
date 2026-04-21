@@ -312,12 +312,49 @@ with tab2:
 
         st.divider()
         col1, col2 = st.columns(2)
+        
         with col1:
             st.subheader("Portfolio Allocation")
+            # Prepare data for semicircle pie chart (including cash)
             numeric_value = pd.to_numeric(portfolio_df["Current Value"], errors='coerce').fillna(0)
-            if numeric_value.sum() > 0:
-                fig_pie = px.pie(portfolio_df, values='Current Value', names='Ticker', title="Allocation by Ticker")
+            total_holdings_value = numeric_value.sum()
+            cash = get_cash_balance()
+            total_portfolio_value = total_holdings_value + cash
+
+            if total_portfolio_value > 0:
+                # Create allocation data including cash
+                alloc_data = portfolio_df[['Ticker', 'Current Value']].copy()
+                alloc_data = alloc_data[pd.to_numeric(alloc_data['Current Value'], errors='coerce').notna()]
+                alloc_data.loc[len(alloc_data)] = ['Cash', cash]  # Add cash as a slice
+                
+                fig_pie = px.pie(
+                    alloc_data, 
+                    values='Current Value', 
+                    names='Ticker', 
+                    title="Portfolio Allocation (Including Cash)",
+                    hole=0.4,                    # Makes it a donut
+                )
+                # Make it a semicircle
+                fig_pie.update_traces(
+                    textinfo='percent+label',
+                    pull=[0.05] * len(alloc_data),  # Slight pull for better look
+                )
+                fig_pie.update_layout(
+                    showlegend=True,
+                    height=400,
+                    margin=dict(t=50, b=50)
+                )
+                # Force semicircle by rotating and clipping (Plotly trick)
+                fig_pie.update_layout(
+                    polar=dict(
+                        radialaxis=dict(visible=False),
+                        angularaxis=dict(visible=False)
+                    )
+                )
                 st.plotly_chart(fig_pie, use_container_width=True)
+            else:
+                st.info("Add holdings or cash to see allocation chart.")
+        
         with col2:
             st.subheader("Gains / Losses")
             fig_bar = px.bar(portfolio_df, x='Ticker', y='Unrealized Gain $', 
@@ -326,7 +363,7 @@ with tab2:
                             color_continuous_scale='RdYlGn')
             st.plotly_chart(fig_bar, use_container_width=True)
 
-    # ================== PENDING ORDERS WITH INSTANT TRASH ICON ==================
+    # Pending Orders with Instant Delete
     pending_df = load_pending_orders()
     if not pending_df.empty:
         st.subheader("📋 Pending Orders")
@@ -343,7 +380,7 @@ with tab2:
                         delete_pending_order(row['id'])
                         st.cache_data.clear()
                         st.success(f"✅ Deleted pending order for {row['ticker']}")
-                        st.rerun()   # Immediate refresh
+                        st.rerun()
     else:
         st.info("No pending orders yet. Add one using the expander above.")
 
