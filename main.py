@@ -164,7 +164,7 @@ def call_grok(prompt):
     except Exception as e:
         return f"❌ Request Error: {str(e)}"
 
-# ----------------- FULL ANALYSIS -----------------
+# ----------------- FULL ANALYSIS (Updated Prompt) -----------------
 def run_full_analysis():
     today = datetime.now().strftime("%B %d, %Y")
     portfolio_df = calculate_portfolio()
@@ -174,7 +174,7 @@ def run_full_analysis():
     portfolio_text = portfolio_df.to_string(index=False) if not portfolio_df.empty else "No holdings yet."
     pending_text = pending_df.to_string(index=False) if not pending_df.empty else "No pending orders."
     
-    prompt = f"""You are a professional market analyst and portfolio manager. Today's date is {today}.
+    prompt = f"""You are a professional market analyst and portfolio manager with a **high risk tolerance**. Today's date is {today}.
 
 Current Portfolio Snapshot:
 Cash Available: ${cash:,.2f}
@@ -184,29 +184,31 @@ Pending Orders:
 {pending_text}
 
 **Part 1: Market Overview**
-1. Highest short-term momentum sectors and why.
-2. 10-stock high-probability watchlist.
-3. 5 day trading setups with entry zones, stop losses, profit targets.
-4. Capital management strategy.
-5. Upcoming earnings / macro events this week.
+1. Identify the stock sectors with the **highest short-term momentum** right now and explain why they are leading.
+2. Build a high-probability watchlist: Recommend 10 stocks with strong volatility, volume, and catalyst potential, prioritizing those in the top momentum sectors.
+3. Create 5 actionable day trading setups with specific entry zones, stop losses, and profit targets.
+4. Suggest an aggressive capital management / risk strategy suitable for high risk tolerance.
+5. List upcoming earnings, macro events, or news catalysts that could move stocks this week.
 
-**Part 2: Personalized Recommendations**
-- Buy/Sell/Hold/Trim/Add for each holding
-- Specific entry/exit price zones
-- How much to buy/sell (considering cash)
-- Diversification moves
-- Reasoning based on momentum and your cash/pending orders
-- Risk level and stop ideas
+**Part 2: Personalized Recommendations (High Risk Tolerance)**
+Focus heavily on opportunities in the **highest short-term momentum sectors**. 
+For each existing holding and potential new opportunities:
+- Give a clear **Buy / Sell / Hold / Trim / Add** recommendation with an aggressive bias when momentum is strong.
+- Suggest specific entry or exit price zones or technical triggers.
+- State **how much** to buy or sell (be specific with share counts or % of cash/portfolio, considering available cash).
+- Recommend diversification moves, but allow concentration in top momentum sectors when the setup is strong.
+- Provide clear reasoning tied to current momentum, valuation, catalysts, risk, and your cash/pending orders.
+- Assign a risk level (Low / Medium / High) and suggest stop-loss ideas.
 
-**Overall Strategy**
-- Cash deployment suggestions
-- Pending orders advice (keep/modify/cancel)
-- Rebalancing and new position ideas
-- Compounding plan
+**Overall Portfolio Strategy**
+- Aggressive cash deployment suggestions focused on highest momentum sectors.
+- Advice on pending orders (keep, modify, or cancel).
+- Rebalancing summary — lean into strong momentum while maintaining basic risk controls.
+- How to compound daily gains responsibly into long-term growth with a high risk tolerance approach.
 
-Use clear headings and bullet points."""
+Be detailed, realistic, and actionable. Use clear headings and bullet points. Prioritize momentum-driven opportunities."""
 
-    with st.spinner("Generating full analysis..."):
+    with st.spinner("Generating full analysis with high risk tolerance focus..."):
         result = call_grok(prompt)
         st.session_state.full_analysis = result
         return result
@@ -216,7 +218,7 @@ with st.sidebar:
     st.header("Controls")
     if st.button("🔥 Run Full Daily Analysis + Portfolio Advice", type="primary"):
         run_full_analysis()
-        st.success("✅ Full analysis ready!")
+        st.success("✅ Full analysis ready (High Risk Tolerance Mode)!")
     
     if st.button("🔄 Refresh Portfolio Prices"):
         st.cache_data.clear()
@@ -293,11 +295,10 @@ with tab2:
                 st.success("All pending orders cleared!")
                 st.rerun()
 
-    # ================== PORTFOLIO PERFORMANCE METRICS ==================
+    # Portfolio Performance Metrics (unchanged from previous version)
     portfolio_df = calculate_portfolio()
     cash = get_cash_balance()
     
-    # Safe numeric calculations
     numeric_value = pd.to_numeric(portfolio_df["Current Value"], errors='coerce').fillna(0)
     numeric_gain = pd.to_numeric(portfolio_df["Unrealized Gain $"], errors='coerce').fillna(0)
     numeric_return = pd.to_numeric(portfolio_df["Unrealized Gain %"], errors='coerce').fillna(0)
@@ -306,13 +307,9 @@ with tab2:
     total_portfolio_value = total_holdings_value + cash
     total_unrealized_gain = numeric_gain.sum()
     overall_return_pct = (total_unrealized_gain / (total_holdings_value + 0.0001) * 100) if total_holdings_value > 0 else 0.0
-    
     num_positions = len(portfolio_df)
-    
-    # New: Average Return per Position
     avg_return_per_position = numeric_return.mean() if num_positions > 0 else 0.0
     
-    # Largest position %
     if not portfolio_df.empty and total_holdings_value > 0:
         largest_pos_pct = (numeric_value.max() / total_holdings_value * 100)
     else:
@@ -322,12 +319,10 @@ with tab2:
 
     st.subheader("📊 Portfolio Performance Metrics")
     col1, col2, col3, col4, col5, col6 = st.columns(6)
-    
     with col1:
         st.metric("Total Portfolio Value", f"${total_portfolio_value:,.2f}")
     with col2:
-        st.metric("Total Unrealized P/L", f"${total_unrealized_gain:,.2f}", 
-                  delta=f"{overall_return_pct:.2f}%")
+        st.metric("Total Unrealized P/L", f"${total_unrealized_gain:,.2f}", delta=f"{overall_return_pct:.2f}%")
     with col3:
         st.metric("Avg Return per Position", f"{avg_return_per_position:.2f}%")
     with col4:
@@ -339,7 +334,7 @@ with tab2:
 
     st.divider()
 
-    # Display Holdings
+    # Display Holdings (kept the same)
     if not portfolio_df.empty:
         st.subheader("Current Holdings")
         styled_df = portfolio_df.style.format({
@@ -353,7 +348,6 @@ with tab2:
 
         st.divider()
         col_chart1, col_chart2 = st.columns(2)
-        
         with col_chart1:
             st.subheader("Portfolio Allocation")
             numeric_value = pd.to_numeric(portfolio_df["Current Value"], errors='coerce').fillna(0)
@@ -365,13 +359,8 @@ with tab2:
                 alloc_data = alloc_data[pd.to_numeric(alloc_data['Current Value'], errors='coerce').notna()]
                 alloc_data.loc[len(alloc_data)] = ['Cash', cash]
                 
-                fig_pie = px.pie(
-                    alloc_data, 
-                    values='Current Value', 
-                    names='Ticker', 
-                    title="Portfolio Allocation (Including Cash)",
-                    hole=0.45
-                )
+                fig_pie = px.pie(alloc_data, values='Current Value', names='Ticker', 
+                                title="Portfolio Allocation (Including Cash)", hole=0.45)
                 fig_pie.update_traces(textinfo='percent+label')
                 st.plotly_chart(fig_pie, use_container_width=True)
         
