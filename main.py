@@ -293,8 +293,53 @@ with tab2:
                 st.success("All pending orders cleared!")
                 st.rerun()
 
-    # Display Holdings
+    # ================== PORTFOLIO PERFORMANCE METRICS ==================
     portfolio_df = calculate_portfolio()
+    cash = get_cash_balance()
+    
+    # Safe numeric calculations
+    numeric_value = pd.to_numeric(portfolio_df["Current Value"], errors='coerce').fillna(0)
+    numeric_gain = pd.to_numeric(portfolio_df["Unrealized Gain $"], errors='coerce').fillna(0)
+    numeric_return = pd.to_numeric(portfolio_df["Unrealized Gain %"], errors='coerce').fillna(0)
+    
+    total_holdings_value = numeric_value.sum()
+    total_portfolio_value = total_holdings_value + cash
+    total_unrealized_gain = numeric_gain.sum()
+    overall_return_pct = (total_unrealized_gain / (total_holdings_value + 0.0001) * 100) if total_holdings_value > 0 else 0.0
+    
+    num_positions = len(portfolio_df)
+    
+    # New: Average Return per Position
+    avg_return_per_position = numeric_return.mean() if num_positions > 0 else 0.0
+    
+    # Largest position %
+    if not portfolio_df.empty and total_holdings_value > 0:
+        largest_pos_pct = (numeric_value.max() / total_holdings_value * 100)
+    else:
+        largest_pos_pct = 0.0
+    
+    cash_pct = (cash / total_portfolio_value * 100) if total_portfolio_value > 0 else 0.0
+
+    st.subheader("📊 Portfolio Performance Metrics")
+    col1, col2, col3, col4, col5, col6 = st.columns(6)
+    
+    with col1:
+        st.metric("Total Portfolio Value", f"${total_portfolio_value:,.2f}")
+    with col2:
+        st.metric("Total Unrealized P/L", f"${total_unrealized_gain:,.2f}", 
+                  delta=f"{overall_return_pct:.2f}%")
+    with col3:
+        st.metric("Avg Return per Position", f"{avg_return_per_position:.2f}%")
+    with col4:
+        st.metric("Number of Positions", num_positions)
+    with col5:
+        st.metric("Largest Position", f"{largest_pos_pct:.1f}%")
+    with col6:
+        st.metric("Cash Allocation", f"{cash_pct:.1f}%")
+
+    st.divider()
+
+    # Display Holdings
     if not portfolio_df.empty:
         st.subheader("Current Holdings")
         styled_df = portfolio_df.style.format({
@@ -305,57 +350,32 @@ with tab2:
             "Unrealized Gain %": lambda x: f"{x:.2f}%" if isinstance(x, (int, float)) else str(x)
         })
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
-        
-        numeric_gain = pd.to_numeric(portfolio_df["Unrealized Gain $"], errors='coerce').fillna(0)
-        total_gain = numeric_gain.sum()
-        st.metric("Total Unrealized P/L", f"${total_gain:,.2f}", delta="")
 
         st.divider()
-        col1, col2 = st.columns(2)
+        col_chart1, col_chart2 = st.columns(2)
         
-        with col1:
+        with col_chart1:
             st.subheader("Portfolio Allocation")
-            # Prepare data for semicircle pie chart (including cash)
             numeric_value = pd.to_numeric(portfolio_df["Current Value"], errors='coerce').fillna(0)
             total_holdings_value = numeric_value.sum()
             cash = get_cash_balance()
-            total_portfolio_value = total_holdings_value + cash
-
-            if total_portfolio_value > 0:
-                # Create allocation data including cash
+            
+            if total_holdings_value + cash > 0:
                 alloc_data = portfolio_df[['Ticker', 'Current Value']].copy()
                 alloc_data = alloc_data[pd.to_numeric(alloc_data['Current Value'], errors='coerce').notna()]
-                alloc_data.loc[len(alloc_data)] = ['Cash', cash]  # Add cash as a slice
+                alloc_data.loc[len(alloc_data)] = ['Cash', cash]
                 
                 fig_pie = px.pie(
                     alloc_data, 
                     values='Current Value', 
                     names='Ticker', 
                     title="Portfolio Allocation (Including Cash)",
-                    hole=0.4,                    # Makes it a donut
+                    hole=0.45
                 )
-                # Make it a semicircle
-                fig_pie.update_traces(
-                    textinfo='percent+label',
-                    pull=[0.05] * len(alloc_data),  # Slight pull for better look
-                )
-                fig_pie.update_layout(
-                    showlegend=True,
-                    height=400,
-                    margin=dict(t=50, b=50)
-                )
-                # Force semicircle by rotating and clipping (Plotly trick)
-                fig_pie.update_layout(
-                    polar=dict(
-                        radialaxis=dict(visible=False),
-                        angularaxis=dict(visible=False)
-                    )
-                )
+                fig_pie.update_traces(textinfo='percent+label')
                 st.plotly_chart(fig_pie, use_container_width=True)
-            else:
-                st.info("Add holdings or cash to see allocation chart.")
         
-        with col2:
+        with col_chart2:
             st.subheader("Gains / Losses")
             fig_bar = px.bar(portfolio_df, x='Ticker', y='Unrealized Gain $', 
                             title="Unrealized Profit/Loss by Position",
@@ -367,7 +387,6 @@ with tab2:
     pending_df = load_pending_orders()
     if not pending_df.empty:
         st.subheader("📋 Pending Orders")
-        
         for idx, row in pending_df.iterrows():
             with st.container(border=True):
                 col1, col2, col3 = st.columns([5, 3, 1])
@@ -382,7 +401,7 @@ with tab2:
                         st.success(f"✅ Deleted pending order for {row['ticker']}")
                         st.rerun()
     else:
-        st.info("No pending orders yet. Add one using the expander above.")
+        st.info("No pending orders yet.")
 
     st.info(f"💰 Available Cash: ${get_cash_balance():,.2f}")
 
