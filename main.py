@@ -17,6 +17,25 @@ st.set_page_config(page_title="AI Stock Dashboard", layout="wide")
 st.title("🚀 My Personal AI Stock Dashboard")
 st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M %p EST')}")
 
+# ----------------- Stronger CSS for Metrics (fixes "..." truncation) -----------------
+st.markdown("""
+    <style>
+    div[data-testid="stMetricValue"] {
+        font-size: 1.45em !important;
+        font-weight: 600 !important;
+        white-space: nowrap !important;
+    }
+    div[data-testid="stMetricLabel"] {
+        font-size: 0.85em !important;
+        color: #666666;
+    }
+    /* Ensure metrics don't get cut off */
+    div.stMetric {
+        min-height: 100px;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 # ----------------- DATABASE -----------------
 def get_db_connection():
     conn = sqlite3.connect('portfolio.db')
@@ -332,7 +351,7 @@ with tab2:
                 st.success("All pending orders cleared!")
                 st.rerun()
 
-    # Performance Metrics
+    # ================== PORTFOLIO PERFORMANCE METRICS (Fixed Font Size) ==================
     portfolio_df = calculate_portfolio()
     cash = get_cash_balance()
     
@@ -351,6 +370,7 @@ with tab2:
     cash_pct = (cash / total_portfolio_value * 100) if total_portfolio_value > 0 else 0.0
 
     st.subheader("📊 Portfolio Performance Metrics")
+    
     col1, col2, col3, col4, col5, col6 = st.columns(6)
     with col1:
         st.metric("Total Portfolio Value", f"${total_portfolio_value:,.2f}")
@@ -367,7 +387,7 @@ with tab2:
 
     st.divider()
 
-    # ================== COMPACT HOLDINGS WITH INDIVIDUAL DELETE & MINIMIZABLE ==================
+    # Compact Holdings with Individual Delete
     if not portfolio_df.empty:
         st.subheader("Current Holdings + Daily Performance")
         
@@ -388,10 +408,10 @@ with tab2:
                         st.cache_data.clear()
                         st.success(f"✅ Deleted {row['Ticker']}")
                         st.rerun()
-        
+
         st.divider()
 
-    # Intraday Charts
+    # Intraday Charts with Cost Basis Line
     if not portfolio_df.empty:
         st.subheader("📈 Intraday Charts (1D) with Cost Basis")
         st.caption("Today's price movement — solid red line = your cost basis per share")
