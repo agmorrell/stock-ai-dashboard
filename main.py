@@ -51,10 +51,13 @@ def init_db():
             status TEXT DEFAULT 'Pending'
         );
     ''')
-    # Default account if none exists
+    # Create default account if none exists
     conn.execute("INSERT OR IGNORE INTO accounts (account_name, risk_tolerance) VALUES ('Main Portfolio', 'Moderate')")
     conn.commit()
     conn.close()
+
+# Call init_db at startup
+init_db()
 
 def get_accounts():
     conn = get_db_connection()
@@ -83,7 +86,6 @@ def set_risk_tolerance(account_name, risk_tolerance):
     conn.close()
 
 def load_holdings(account_name):
-    init_db()
     conn = get_db_connection()
     df = pd.read_sql_query("SELECT * FROM holdings WHERE account_name = ?", conn, params=(account_name,))
     conn.close()
@@ -111,7 +113,6 @@ def clear_all_holdings(account_name):
     conn.close()
 
 def get_cash_balance(account_name):
-    init_db()
     conn = get_db_connection()
     row = conn.execute("SELECT cash FROM cash_balance WHERE account_name = ?", (account_name,)).fetchone()
     conn.close()
@@ -124,7 +125,30 @@ def update_cash_balance(account_name, new_cash):
     conn.commit()
     conn.close()
 
-# (Pending orders functions simplified to use current account - omitted for brevity, but they work the same)
+def add_pending_order(account_name, ticker, order_type, shares, limit_price):
+    conn = get_db_connection()
+    conn.execute("""INSERT INTO pending_orders (account_name, ticker, order_type, shares, limit_price) 
+                    VALUES (?, ?, ?, ?, ?)""", (account_name, ticker.upper(), order_type, shares, limit_price))
+    conn.commit()
+    conn.close()
+
+def load_pending_orders(account_name):
+    conn = get_db_connection()
+    df = pd.read_sql_query("SELECT * FROM pending_orders WHERE account_name = ? ORDER BY id", conn, params=(account_name,))
+    conn.close()
+    return df
+
+def delete_pending_order(order_id):
+    conn = get_db_connection()
+    conn.execute("DELETE FROM pending_orders WHERE id = ?", (order_id,))
+    conn.commit()
+    conn.close()
+
+def clear_all_pending_orders(account_name):
+    conn = get_db_connection()
+    conn.execute("DELETE FROM pending_orders WHERE account_name = ?", (account_name,))
+    conn.commit()
+    conn.close()
 
 # ----------------- PORTFOLIO CALCULATION -----------------
 @st.cache_data(ttl=180)
@@ -198,14 +222,14 @@ def call_grok(prompt, conversation_history=None):
     except Exception as e:
         return f"❌ Request Error: {str(e)}"
 
-# ----------------- FULL ANALYSIS (Uses Selected Account's Risk Tolerance) -----------------
+# ----------------- FULL ANALYSIS -----------------
 def run_full_analysis(selected_account):
     today = datetime.now().strftime("%B %d, %Y")
     portfolio_df = calculate_portfolio(selected_account)
     cash = get_cash_balance(selected_account)
     risk_tolerance = get_risk_tolerance(selected_account)
-    pending_df = load_pending_orders()  # Simplified - can be per-account later
-
+    pending_df = load_pending_orders(selected_account)
+    
     portfolio_text = portfolio_df.to_string(index=False) if not portfolio_df.empty else "No holdings yet."
     pending_text = pending_df.to_string(index=False) if not pending_df.empty else "No pending orders."
     
@@ -320,12 +344,14 @@ with tab2:
         st.session_state.current_account = selected_account
     
     with col_acc2:
-        if st.button("New Account"):
-            new_name = st.text_input("New Account Name", key="new_account_name")
-            if new_name and st.button("Create", key="create_acc"):
-                add_account(new_name)
-                st.success(f"Account '{new_name}' created!")
+        new_account_name = st.text_input("New Account Name", key="new_account_name", placeholder="e.g. IRA Account")
+        if st.button("Create New Account"):
+            if new_account_name.strip():
+                add_account(new_account_name.strip())
+                st.success(f"Account '{new_account_name}' created!")
                 st.rerun()
+            else:
+                st.warning("Please enter an account name.")
 
     # Risk Tolerance for current account
     current_risk = get_risk_tolerance(selected_account)
@@ -366,13 +392,40 @@ with tab2:
                 st.success(f"✅ {ticker} saved to {selected_account}!")
                 st.rerun()
 
-    # (Pending orders and clear buttons can be added similarly per account if desired)
+    # (You can add pending orders per account later if needed)
 
     # Performance Metrics for current account
     portfolio_df = calculate_portfolio(selected_account)
     cash = get_cash_balance(selected_account)
     
-    # ... (same metrics code as before)
+    numeric_value = pd.to_numeric(portfolio_df["Current Value"], errors='coerce').fillna(0)
+    numeric_gain = pd.to_numeric(portfolio_df["Unrealized Gain $"], errors='coerce').fillna(0)
+    numeric_return = pd.to_numeric(portfolio_df["Unrealized Gain %"], errors='coerce').fillna(0)
+    
+    total_holdings_value = numeric_value.sum()
+    total_portfolio_value = total_holdings_value + cash
+    total_unrealized_gain = numeric_gain.sum()
+    overall_return_pct = (total_unrealized_gain / (total_holdings_value + 0.0001) * 100) if total_holdings_value > 0 else 0.0
+    num_positions = len(portfolio_df)
+    avg_return_per_position = numeric_return.mean() if num_positions > 0 else 0.0
+    
+    largest_pos_pct = (numeric_value.max() / total_holdings_value * 100) if total_holdings_value > 0 else 0.0
+    cash_pct = (cash / total_portfolio_value * 100) if total_portfolio_value > 0 else 0.0
+
+    st.subheader("📊 Portfolio Performance Metrics")
+    col1, col2, col3, col4, col5, col6 = st.columns(6)
+    with col1:
+        st.metric("Total Portfolio Value", f"${total_portfolio_value:,.2f}")
+    with col2:
+        st.metric("Total Unrealized P/L", f"${total_unrealized_gain:,.2f}", delta=f"{overall_return_pct:.2f}%")
+    with col3:
+        st.metric("Avg Return per Position", f"{avg_return_per_position:.2f}%")
+    with col4:
+        st.metric("Number of Positions", num_positions)
+    with col5:
+        st.metric("Largest Position", f"{largest_pos_pct:.1f}%")
+    with col6:
+        st.metric("Cash Allocation", f"{cash_pct:.1f}%")
 
     st.info(f"Current Account: **{selected_account}** | Risk Tolerance: **{get_risk_tolerance(selected_account)}**")
 
