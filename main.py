@@ -92,7 +92,7 @@ def clear_all_pending_orders():
     conn.commit()
     conn.close()
 
-# ----------------- PORTFOLIO CALCULATION with 1D Change -----------------
+# ----------------- PORTFOLIO CALCULATION -----------------
 @st.cache_data(ttl=180)
 def calculate_portfolio():
     df = load_holdings()
@@ -268,7 +268,7 @@ with tab1:
 with tab2:
     st.header("Portfolio Tracker")
     
-    # Cash Balance, Add Holding, Add Pending Order, Clear buttons (kept the same as before)
+    # Cash Balance
     st.subheader("💰 Cash Balance")
     current_cash = get_cash_balance()
     new_cash = st.number_input("Update Cash Available ($)", min_value=0.0, value=current_cash, step=100.0)
@@ -279,6 +279,7 @@ with tab2:
 
     st.divider()
 
+    # Add Holding
     with st.expander("➕ Add or Update Holding"):
         col1, col2, col3 = st.columns(3)
         with col1:
@@ -294,6 +295,7 @@ with tab2:
                 st.success(f"✅ {ticker} saved!")
                 st.rerun()
 
+    # Add Pending Order
     with st.expander("📋 Add Pending Order"):
         col1, col2 = st.columns(2)
         with col1:
@@ -308,6 +310,7 @@ with tab2:
                 st.success(f"✅ Pending {po_type} for {po_ticker} added!")
                 st.rerun()
 
+    # Clear All Buttons
     col_clear1, col_clear2 = st.columns(2)
     with col_clear1:
         if st.button("🗑️ Clear All Holdings"):
@@ -323,7 +326,7 @@ with tab2:
                 st.success("All pending orders cleared!")
                 st.rerun()
 
-    # Performance Metrics (kept the same)
+    # Performance Metrics
     portfolio_df = calculate_portfolio()
     cash = get_cash_balance()
     
@@ -372,40 +375,56 @@ with tab2:
         
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
-    # ================== INTRADAY CHARTS FOR EACH STOCK ==================
-    if not portfolio_df.empty:
         st.divider()
-        st.subheader("📈 Intraday Charts (1D) - Individual Stocks")
-        st.caption("Real-time price movement today (refreshes every few minutes)")
 
-        # Create a grid of small intraday charts
-        cols = st.columns(3)  # 3 charts per row on wide screens
+    # ================== INTRADAY CHARTS WITH COST BASIS LINE ==================
+    if not portfolio_df.empty:
+        st.subheader("📈 Intraday Charts (1D) with Cost Basis")
+        st.caption("Today's price movement (solid red line = your cost basis per share)")
+
+        cols = st.columns(3)
         for i, row in portfolio_df.iterrows():
             ticker_symbol = row['Ticker']
+            cost_basis = row['Cost Basis']
+            
             with cols[i % 3]:
                 try:
                     t = Ticker(ticker_symbol)
-                    # Fetch today's intraday data (1m or 5m interval)
                     hist = t.history(period="1d", interval="5m")
                     
                     if not hist.empty:
                         fig = go.Figure()
+                        
+                        # Price line
                         fig.add_trace(go.Scatter(
                             x=hist.index,
                             y=hist['Close'],
                             mode='lines',
                             name=ticker_symbol,
-                            line=dict(color='#1f77b4')
+                            line=dict(color='#1f77b4', width=2)
                         ))
+                        
+                        # Solid red cost basis line
+                        fig.add_hline(
+                            y=cost_basis,
+                            line_dash="solid",
+                            line_color="red",
+                            line_width=2,
+                            annotation_text=f"Cost Basis (${cost_basis:.2f})",
+                            annotation_position="top right",
+                            annotation_font_size=11,
+                            annotation_font_color="red"
+                        )
+                        
                         fig.update_layout(
                             title=f"{ticker_symbol} Today",
                             xaxis_title="Time",
-                            yaxis_title="Price",
-                            height=280,
-                            margin=dict(l=40, r=40, t=50, b=40),
+                            yaxis_title="Price ($)",
+                            height=300,
+                            margin=dict(l=40, r=40, t=60, b=40),
                             template="plotly_white"
                         )
-                        st.plotly_chart(fig, use_container_width=True, key=f"chart_{ticker_symbol}")
+                        st.plotly_chart(fig, use_container_width=True, key=f"chart_{ticker_symbol}_{i}")
                     else:
                         st.info(f"No intraday data for {ticker_symbol} yet.")
                 except Exception:
@@ -433,7 +452,7 @@ with tab2:
         fig_sector.update_layout(xaxis_title="Percentage of Total Portfolio (%)")
         st.plotly_chart(fig_sector, use_container_width=True)
 
-    # Pending Orders (unchanged)
+    # Pending Orders
     pending_df = load_pending_orders()
     if not pending_df.empty:
         st.subheader("📋 Pending Orders")
