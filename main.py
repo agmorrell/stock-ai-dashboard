@@ -16,7 +16,7 @@ st.set_page_config(page_title="AI Stock Dashboard", layout="wide")
 st.title("🚀 My Personal AI Stock Dashboard")
 st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M %p EST')}")
 
-# ----------------- DATABASE (unchanged) -----------------
+# ----------------- DATABASE -----------------
 def get_db_connection():
     conn = sqlite3.connect('portfolio.db')
     conn.row_factory = sqlite3.Row
@@ -91,12 +91,12 @@ def clear_all_pending_orders():
     conn.commit()
     conn.close()
 
-# ----------------- PORTFOLIO CALCULATION -----------------
+# ----------------- PORTFOLIO CALCULATION (with Sector) -----------------
 @st.cache_data(ttl=300)
 def calculate_portfolio():
     df = load_holdings()
     if df.empty:
-        return pd.DataFrame(columns=['Ticker','Shares','Cost Basis','Current Price','Current Value','Unrealized Gain $','Unrealized Gain %'])
+        return pd.DataFrame(columns=['Ticker','Shares','Cost Basis','Current Price','Current Value','Unrealized Gain $','Unrealized Gain %','Sector'])
     
     data = []
     for _, row in df.iterrows():
@@ -106,6 +106,7 @@ def calculate_portfolio():
             ticker = Ticker(ticker_symbol)
             info = ticker.info
             current_price = float(info.get('currentPrice') or info.get('regularMarketPrice') or info.get('previousClose') or 0.0)
+            sector = info.get('sector') or "Other"
             
             current_value = row['shares'] * current_price
             cost = row['shares'] * row['cost_basis']
@@ -119,7 +120,8 @@ def calculate_portfolio():
                 'Current Price': round(current_price, 2),
                 'Current Value': round(current_value, 2),
                 'Unrealized Gain $': round(gain_dollar, 2),
-                'Unrealized Gain %': round(gain_pct, 2)
+                'Unrealized Gain %': round(gain_pct, 2),
+                'Sector': sector
             })
         except Exception:
             data.append({
@@ -129,7 +131,8 @@ def calculate_portfolio():
                 'Current Price': "N/A",
                 'Current Value': "N/A",
                 'Unrealized Gain $': "N/A",
-                'Unrealized Gain %': "N/A"
+                'Unrealized Gain %': "N/A",
+                'Sector': "Other"
             })
     
     return pd.DataFrame(data)
@@ -231,8 +234,6 @@ with tab1:
         
         st.divider()
         st.subheader("💬 Ask Grok for Clarification")
-        
-        # Tooltip / Helper text in light grey italic
         st.markdown(
             """
             <p style="color: #888888; font-style: italic; font-size: 0.95em;">
@@ -274,7 +275,7 @@ with tab2:
 
     st.divider()
 
-    # Add Holding
+    # Add Holding + Pending Orders + Clear buttons (unchanged)
     with st.expander("➕ Add or Update Holding"):
         col1, col2, col3 = st.columns(3)
         with col1:
@@ -290,7 +291,6 @@ with tab2:
                 st.success(f"✅ {ticker} saved!")
                 st.rerun()
 
-    # Add Pending Order
     with st.expander("📋 Add Pending Order"):
         col1, col2 = st.columns(2)
         with col1:
@@ -305,7 +305,6 @@ with tab2:
                 st.success(f"✅ Pending {po_type} for {po_ticker} added!")
                 st.rerun()
 
-    # Clear All Buttons
     col_clear1, col_clear2 = st.columns(2)
     with col_clear1:
         if st.button("🗑️ Clear All Holdings"):
@@ -321,7 +320,7 @@ with tab2:
                 st.success("All pending orders cleared!")
                 st.rerun()
 
-    # ================== PORTFOLIO PERFORMANCE METRICS ==================
+    # Performance Metrics
     portfolio_df = calculate_portfolio()
     cash = get_cash_balance()
     
@@ -336,11 +335,7 @@ with tab2:
     num_positions = len(portfolio_df)
     avg_return_per_position = numeric_return.mean() if num_positions > 0 else 0.0
     
-    if not portfolio_df.empty and total_holdings_value > 0:
-        largest_pos_pct = (numeric_value.max() / total_holdings_value * 100)
-    else:
-        largest_pos_pct = 0.0
-    
+    largest_pos_pct = (numeric_value.max() / total_holdings_value * 100) if total_holdings_value > 0 else 0.0
     cash_pct = (cash / total_portfolio_value * 100) if total_portfolio_value > 0 else 0.0
 
     st.subheader("📊 Portfolio Performance Metrics")
@@ -399,7 +394,44 @@ with tab2:
                             color_continuous_scale='RdYlGn')
             st.plotly_chart(fig_bar, use_container_width=True)
 
-    # Pending Orders with Instant Delete
+    # New: Sector Allocation % Chart
+    if not portfolio_df.empty:
+        st.subheader("Sector Allocation (%)")
+        
+        # Add real sector from yfinance
+        sectors = []
+        for ticker_symbol in portfolio_df['Ticker']:
+            try:
+                t = Ticker(ticker_symbol)
+                sector = t.info.get('sector') or "Other"
+            except:
+                sector = "Other"
+            sectors.append(sector)
+        
+        portfolio_df['Sector'] = sectors
+        
+        # Group by sector
+        sector_df = portfolio_df.groupby('Sector')['Current Value'].sum().reset_index()
+        sector_df['Percentage'] = (sector_df['Current Value'] / total_holdings_value * 100) if total_holdings_value > 0 else 0
+        
+        # Add Cash as a sector
+        sector_df.loc[len(sector_df)] = ['Cash', cash, (cash / total_portfolio_value * 100) if total_portfolio_value > 0 else 0]
+        
+        fig_sector = px.bar(
+            sector_df, 
+            x='Percentage', 
+            y='Sector', 
+            orientation='h',
+            title="Allocation by Sector (%)",
+            text='Percentage',
+            color='Percentage',
+            color_continuous_scale='Blues'
+        )
+        fig_sector.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+        fig_sector.update_layout(xaxis_title="Percentage of Total Portfolio (%)", yaxis_title="")
+        st.plotly_chart(fig_sector, use_container_width=True)
+
+    # Pending Orders
     pending_df = load_pending_orders()
     if not pending_df.empty:
         st.subheader("📋 Pending Orders")
@@ -420,4 +452,5 @@ with tab2:
         st.info("No pending orders yet.")
 
     st.info(f"💰 Available Cash: ${get_cash_balance():,.2f}")
-    st.caption("Built with Streamlit + yfinance + Grok API • Educational use only")
+
+st.caption("Built with Streamlit + yfinance + Grok API • Educational use only")
