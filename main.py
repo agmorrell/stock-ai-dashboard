@@ -125,7 +125,7 @@ def delete_pending_order(order_id):
     conn.commit()
     conn.close()
 
-# ----------------- PORTFOLIO CALCULATION -----------------
+# ----------------- PORTFOLIO CALCULATION (with Today % Change) -----------------
 @st.cache_data(ttl=180)
 def calculate_portfolio(account_name):
     df = load_holdings(account_name)
@@ -351,21 +351,23 @@ with tab2:
 
     st.divider()
 
-    # Holdings Table with proper formatting
+    # Holdings Table with Today % Change and proper formatting
     if not df.empty:
-        st.subheader("Current Holdings")
-        display_df = df.copy()
-        display_df = display_df.style.format({
+        st.subheader("Current Holdings + Daily Performance")
+        display_df = df.style.format({
             "Cost Basis": "${:.2f}",
             "Current Price": "${:.2f}",
             "Current Value": "${:.2f}",
             "Unrealized Gain $": "${:.2f}",
             "Unrealized Gain %": "{:.2f}%",
             "Today % Change": "{:.2f}%"
-        })
+        }).apply(lambda x: ['color: #00cc00' if isinstance(v, (int, float)) and v > 0 else 
+                           'color: #ff4444' if isinstance(v, (int, float)) and v < 0 else '' for v in x], 
+                subset=['Today % Change'])
+        
         st.dataframe(display_df, use_container_width=True, hide_index=True)
 
-    # Allocation Charts with better labels
+    # Allocation Charts
     if total_value > 0:
         st.subheader("Allocation Charts")
         c1, c2 = st.columns(2)
