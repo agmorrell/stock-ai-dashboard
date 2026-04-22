@@ -17,55 +17,62 @@ st.set_page_config(page_title="AI Stock Dashboard", layout="wide")
 st.title("🚀 My Personal AI Stock Dashboard")
 st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M %p EST')}")
 
-# Stronger CSS for clean, consistent spacing in Full Analysis tab
+# Stronger CSS to fix run-together text and improve spacing
 st.markdown("""
     <style>
-    /* Base font and spacing for all markdown content */
-    .stMarkdown, .stMarkdown p, .stMarkdown li {
+    /* Consistent base font and spacing */
+    .stMarkdown, .stMarkdown p, .stMarkdown li, .stMarkdown span {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         font-size: 1.05em;
-        line-height: 1.75;
-        margin-bottom: 1.1em;
+        line-height: 1.85 !important;
+        margin-bottom: 1.2em !important;
     }
     
-    /* Better heading spacing */
-    .stMarkdown h1 { font-size: 1.85em; margin: 2em 0 0.8em 0; color: #1f77b4; }
-    .stMarkdown h2 { font-size: 1.55em; margin: 1.8em 0 0.7em 0; color: #1f77b4; }
-    .stMarkdown h3 { font-size: 1.35em; margin: 1.6em 0 0.6em 0; color: #1f77b4; border-left: 5px solid #1f77b4; padding-left: 14px; }
-    
-    /* Fix run-on text and improve readability */
+    /* Force proper word wrapping and spacing */
     .stMarkdown p {
-        white-space: pre-wrap;
-        word-break: break-word;
+        white-space: pre-wrap !important;
+        word-break: break-word !important;
+        hyphens: auto;
     }
     
-    /* Better list spacing */
+    /* Headings */
+    .stMarkdown h1 { font-size: 1.85em; margin: 2.2em 0 0.9em 0; color: #1f77b4; }
+    .stMarkdown h2 { font-size: 1.55em; margin: 2em 0 0.8em 0; color: #1f77b4; }
+    .stMarkdown h3 { 
+        font-size: 1.35em; 
+        margin: 1.8em 0 0.7em 0; 
+        color: #1f77b4; 
+        border-left: 5px solid #1f77b4; 
+        padding-left: 14px; 
+    }
+    
+    /* Lists */
     .stMarkdown ul, .stMarkdown ol {
-        padding-left: 1.8em;
-        margin-bottom: 1.4em;
+        padding-left: 2em;
+        margin-bottom: 1.5em;
     }
     .stMarkdown li {
-        margin-bottom: 0.65em;
-        padding-left: 0.3em;
+        margin-bottom: 0.8em;
+        padding-left: 0.4em;
     }
     
-    /* Highlight day trading setups section */
+    /* Visual separation for dense recommendation blocks */
     .stMarkdown h3 + ul, .stMarkdown h3 + ol, .stMarkdown h3 + p {
         background-color: #f8f9fa;
-        padding: 1.2em 1.4em;
+        padding: 1.4em 1.6em;
         border-radius: 8px;
         border-left: 6px solid #1f77b4;
-        margin: 1.2em 0;
+        margin: 1.4em 0 1.8em 0;
     }
     
-    /* Make numbers and recommendations easier to read */
-    .stMarkdown strong {
+    /* Extra breathing room around numbers and recommendations */
+    .stMarkdown strong, .stMarkdown b {
         color: #1f77b4;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# ----------------- DATABASE (unchanged) -----------------
+# ----------------- DATABASE (unchanged from previous stable version) -----------------
 def get_db_connection():
     conn = sqlite3.connect('portfolio.db')
     conn.row_factory = sqlite3.Row
@@ -309,7 +316,6 @@ with tab1:
 with tab2:
     st.header("Portfolio Tracker")
     
-    # Account Management
     accounts = get_accounts()
     col_a, col_b = st.columns([3, 2])
     with col_a:
@@ -325,7 +331,6 @@ with tab2:
                 st.success(f"Created {new_acc}")
                 st.rerun()
 
-    # Risk Tolerance
     curr_risk = get_risk_tolerance(selected)
     new_risk = st.selectbox("Risk Tolerance", ["Conservative", "Moderate", "Aggressive"], 
                            index=["Conservative","Moderate","Aggressive"].index(curr_risk))
@@ -336,7 +341,6 @@ with tab2:
 
     st.divider()
 
-    # Cash
     cash = get_cash_balance(selected)
     new_cash = st.number_input("Cash Balance ($)", value=cash, step=100.0)
     if st.button("Update Cash"):
@@ -346,7 +350,6 @@ with tab2:
 
     st.divider()
 
-    # Add Holding
     with st.expander("➕ Add Holding"):
         c1, c2, c3 = st.columns(3)
         with c1: ticker = st.text_input("Ticker", key="tkr").upper()
@@ -359,7 +362,6 @@ with tab2:
                 st.success(f"Saved {ticker}")
                 st.rerun()
 
-    # Add Pending Order
     with st.expander("📋 Add Pending Order"):
         c1, c2 = st.columns(2)
         with c1:
@@ -374,12 +376,10 @@ with tab2:
                 st.success("Pending order added")
                 st.rerun()
 
-    # Portfolio Data
     df = calculate_portfolio(selected)
     cash = get_cash_balance(selected)
     total_value = (df["Current Value"].sum() if not df.empty else 0) + cash
 
-    # Metrics
     st.subheader("📊 Performance Metrics")
     cols = st.columns(6)
     with cols[0]: st.metric("Total Value", f"${total_value:,.2f}")
@@ -391,7 +391,6 @@ with tab2:
 
     st.divider()
 
-    # Holdings Table
     if not df.empty:
         st.subheader("Current Holdings + Daily Performance")
         styled_df = df.style.format({
@@ -408,11 +407,9 @@ with tab2:
         )
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
-    # Intraday Charts
     if not df.empty:
         st.subheader("📈 Intraday Charts (1D) with Cost Basis")
         st.caption("Solid red line = your cost basis per share")
-        
         cols = st.columns(3)
         for i, row in df.iterrows():
             ticker_symbol = row['Ticker']
@@ -423,69 +420,30 @@ with tab2:
                     hist = t.history(period="1d", interval="5m")
                     if not hist.empty:
                         fig = go.Figure()
-                        fig.add_trace(go.Scatter(
-                            x=hist.index, 
-                            y=hist['Close'], 
-                            mode='lines', 
-                            name=ticker_symbol,
-                            line=dict(color='#1f77b4', width=2)
-                        ))
-                        fig.add_hline(
-                            y=cost_basis, 
-                            line_dash="solid", 
-                            line_color="red", 
-                            line_width=2.5,
-                            annotation_text=f"Cost Basis (${cost_basis:.2f})",
-                            annotation_position="top right",
-                            annotation_font_color="red"
-                        )
-                        fig.update_layout(
-                            title=f"{ticker_symbol} Today",
-                            xaxis_title="Time",
-                            yaxis_title="Price ($)",
-                            height=300,
-                            template="plotly_white"
-                        )
-                        st.plotly_chart(fig, use_container_width=True, key=f"chart_{ticker_symbol}_{i}")
-                    else:
-                        st.info(f"No intraday data for {ticker_symbol} yet.")
-                except Exception:
-                    st.info(f"Could not load chart for {ticker_symbol}")
+                        fig.add_trace(go.Scatter(x=hist.index, y=hist['Close'], mode='lines', line=dict(color='#1f77b4', width=2)))
+                        fig.add_hline(y=cost_basis, line_dash="solid", line_color="red", line_width=2.5,
+                                      annotation_text=f"Cost Basis (${cost_basis:.2f})", annotation_position="top right")
+                        fig.update_layout(title=f"{ticker_symbol} Today", height=300)
+                        st.plotly_chart(fig, use_container_width=True, key=f"chart_{i}")
+                except:
+                    st.info(f"No chart for {ticker_symbol}")
 
-    # Allocation Charts
     if total_value > 0:
         st.subheader("Allocation Charts")
         c1, c2 = st.columns(2)
-        
         with c1:
             pie_data = df[['Ticker', 'Current Value']].copy()
             pie_data.loc[len(pie_data)] = ['Cash', cash]
-            fig_pie = px.pie(pie_data, values='Current Value', names='Ticker', 
-                            title="Portfolio Allocation (Including Cash)", hole=0.45)
-            fig_pie.update_traces(textinfo='percent+label')
-            st.plotly_chart(fig_pie, use_container_width=True)
-
+            st.plotly_chart(px.pie(pie_data, values='Current Value', names='Ticker', title="Portfolio Allocation (Including Cash)", hole=0.45), use_container_width=True)
         with c2:
             sector_df = df.groupby('Sector')['Current Value'].sum().reset_index()
             sector_df['Percentage'] = (sector_df['Current Value'] / df['Current Value'].sum() * 100) if not df.empty else 0
             sector_df.loc[len(sector_df)] = ['Cash', cash, (cash / total_value * 100)]
             sector_df = sector_df.sort_values('Percentage', ascending=False)
-            
-            fig_sector = px.bar(
-                sector_df, 
-                x='Percentage', 
-                y='Sector', 
-                orientation='h',
-                title="Sector Allocation (%)",
-                text='Percentage',
-                color='Percentage',
-                color_continuous_scale='Blues'
-            )
+            fig_sector = px.bar(sector_df, x='Percentage', y='Sector', orientation='h', title="Sector Allocation (%)", text='Percentage', color='Percentage', color_continuous_scale='Blues')
             fig_sector.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
-            fig_sector.update_layout(xaxis_title="Percentage of Total Portfolio")
             st.plotly_chart(fig_sector, use_container_width=True)
 
-    # Pending Orders
     pending = load_pending_orders(selected)
     if not pending.empty:
         st.subheader("📋 Pending Orders")
