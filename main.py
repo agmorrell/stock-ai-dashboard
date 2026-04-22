@@ -17,21 +17,26 @@ st.set_page_config(page_title="AI Stock Dashboard", layout="wide")
 st.title("🚀 My Personal AI Stock Dashboard")
 st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M %p EST')}")
 
-# ----------------- Stronger CSS for Metrics (fixes "..." truncation) -----------------
+# ----------------- CSS Improvements for Full Analysis Tab -----------------
 st.markdown("""
     <style>
-    div[data-testid="stMetricValue"] {
-        font-size: 1.45em !important;
-        font-weight: 600 !important;
-        white-space: nowrap !important;
+    /* Fix spacing and font consistency in analysis text */
+    .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 {
+        margin-top: 1.2em;
+        margin-bottom: 0.6em;
     }
-    div[data-testid="stMetricLabel"] {
-        font-size: 0.85em !important;
-        color: #666666;
+    .stMarkdown p, .stMarkdown li {
+        line-height: 1.6;
+        font-size: 1.02em;
     }
-    /* Ensure metrics don't get cut off */
-    div.stMetric {
-        min-height: 100px;
+    .stMarkdown ul, .stMarkdown ol {
+        padding-left: 1.5em;
+    }
+    /* Make day trading setups stand out nicely */
+    .stMarkdown h3 {
+        color: #1f77b4;
+        border-left: 4px solid #1f77b4;
+        padding-left: 12px;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -259,6 +264,7 @@ tab1, tab2 = st.tabs(["📈 Full Analysis", "💼 My Portfolio"])
 with tab1:
     st.header("Full Daily Market + Portfolio Analysis")
     if "full_analysis" in st.session_state:
+        # Improved rendering for better spacing and font consistency
         st.markdown(st.session_state.full_analysis)
         
         st.divider()
@@ -351,7 +357,7 @@ with tab2:
                 st.success("All pending orders cleared!")
                 st.rerun()
 
-    # ================== PORTFOLIO PERFORMANCE METRICS (Fixed Font Size) ==================
+    # Performance Metrics
     portfolio_df = calculate_portfolio()
     cash = get_cash_balance()
     
@@ -370,7 +376,6 @@ with tab2:
     cash_pct = (cash / total_portfolio_value * 100) if total_portfolio_value > 0 else 0.0
 
     st.subheader("📊 Portfolio Performance Metrics")
-    
     col1, col2, col3, col4, col5, col6 = st.columns(6)
     with col1:
         st.metric("Total Portfolio Value", f"${total_portfolio_value:,.2f}")
