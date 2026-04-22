@@ -91,7 +91,7 @@ def clear_all_pending_orders():
     conn.commit()
     conn.close()
 
-# ----------------- PORTFOLIO CALCULATION (with Sector + 1D Change) -----------------
+# ----------------- PORTFOLIO CALCULATION (with accurate Sector) -----------------
 @st.cache_data(ttl=300)
 def calculate_portfolio():
     df = load_holdings()
@@ -106,9 +106,9 @@ def calculate_portfolio():
             ticker = Ticker(ticker_symbol)
             info = ticker.info
             current_price = float(info.get('currentPrice') or info.get('regularMarketPrice') or info.get('previousClose') or 0.0)
-            sector = info.get('sector') or "Other"
+            sector = info.get('sector') or info.get('industry') or "Other"
             
-            # Get today's % change
+            # Today's % change
             day_change = info.get('regularMarketChangePercent') or 0.0
             
             current_value = row['shares'] * current_price
@@ -142,7 +142,7 @@ def calculate_portfolio():
     
     return pd.DataFrame(data)
 
-# ----------------- GROK API (unchanged) -----------------
+# ----------------- GROK API -----------------
 def call_grok(prompt, conversation_history=None):
     api_key = os.environ.get("GROK_API_KEY")
     if not api_key:
@@ -165,7 +165,7 @@ def call_grok(prompt, conversation_history=None):
     except Exception as e:
         return f"❌ Request Error: {str(e)}"
 
-# ----------------- FULL ANALYSIS (unchanged) -----------------
+# ----------------- FULL ANALYSIS (High Risk + Momentum Focus) -----------------
 def run_full_analysis():
     today = datetime.now().strftime("%B %d, %Y")
     portfolio_df = calculate_portfolio()
@@ -362,7 +362,7 @@ with tab2:
 
     st.divider()
 
-    # Display Holdings + Daily 1D Change
+    # Display Holdings with Daily Change
     if not portfolio_df.empty:
         st.subheader("Current Holdings + Daily Performance")
         styled_df = portfolio_df.style.format({
@@ -403,25 +403,31 @@ with tab2:
                             color_continuous_scale='RdYlGn')
             st.plotly_chart(fig_bar, use_container_width=True)
 
-    # Sector Allocation
+    # Sector Allocation Chart (now matches daily analysis sectors)
     if not portfolio_df.empty:
         st.subheader("Sector Allocation (%)")
+        
         sector_df = portfolio_df.groupby('Sector')['Current Value'].sum().reset_index()
         sector_df['Percentage'] = (sector_df['Current Value'] / total_holdings_value * 100) if total_holdings_value > 0 else 0
+        
+        # Add Cash
         sector_df.loc[len(sector_df)] = ['Cash', cash, (cash / total_portfolio_value * 100) if total_portfolio_value > 0 else 0]
+        
+        # Sort by percentage descending
+        sector_df = sector_df.sort_values('Percentage', ascending=False)
         
         fig_sector = px.bar(
             sector_df, 
             x='Percentage', 
             y='Sector', 
             orientation='h',
-            title="Allocation by Sector (%)",
+            title="Allocation by Sector (%) - Matching Daily Analysis",
             text='Percentage',
             color='Percentage',
             color_continuous_scale='Blues'
         )
         fig_sector.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-        fig_sector.update_layout(xaxis_title="Percentage of Total Portfolio (%)")
+        fig_sector.update_layout(xaxis_title="Percentage of Total Portfolio (%)", yaxis_title="")
         st.plotly_chart(fig_sector, use_container_width=True)
 
     # Pending Orders
