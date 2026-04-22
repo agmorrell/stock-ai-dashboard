@@ -47,6 +47,12 @@ def save_holding(ticker, shares, cost_basis):
     conn.commit()
     conn.close()
 
+def delete_holding(ticker):
+    conn = get_db_connection()
+    conn.execute("DELETE FROM holdings WHERE ticker = ?", (ticker.upper(),))
+    conn.commit()
+    conn.close()
+
 def clear_all_holdings():
     conn = get_db_connection()
     conn.execute("DELETE FROM holdings")
@@ -326,7 +332,7 @@ with tab2:
                 st.success("All pending orders cleared!")
                 st.rerun()
 
-    # ================== PORTFOLIO PERFORMANCE METRICS (Fixed Font Size) ==================
+    # Performance Metrics
     portfolio_df = calculate_portfolio()
     cash = get_cash_balance()
     
@@ -345,20 +351,6 @@ with tab2:
     cash_pct = (cash / total_portfolio_value * 100) if total_portfolio_value > 0 else 0.0
 
     st.subheader("📊 Portfolio Performance Metrics")
-    
-    # Custom CSS for consistent, larger metric values (no "...")
-    st.markdown("""
-        <style>
-        div[data-testid="stMetricValue"] {
-            font-size: 1.35em !important;
-            font-weight: 600;
-        }
-        div[data-testid="stMetricLabel"] {
-            font-size: 0.85em !important;
-        }
-        </style>
-    """, unsafe_allow_html=True)
-
     col1, col2, col3, col4, col5, col6 = st.columns(6)
     with col1:
         st.metric("Total Portfolio Value", f"${total_portfolio_value:,.2f}")
@@ -375,9 +367,27 @@ with tab2:
 
     st.divider()
 
-    # Display Holdings
+    # Display Holdings with Individual Delete
     if not portfolio_df.empty:
-        st.subheader("Current Holdings")
+        st.subheader("Current Holdings + Daily Performance")
+        
+        for idx, row in portfolio_df.iterrows():
+            with st.container(border=True):
+                col1, col2, col3, col4 = st.columns([3, 2, 2, 1])
+                with col1:
+                    st.write(f"**{row['Ticker']}**")
+                with col2:
+                    st.write(f"Shares: {row['Shares']}")
+                with col3:
+                    st.write(f"Value: ${row['Current Value']:,.2f}")
+                with col4:
+                    if st.button("🗑️", key=f"del_hold_{row['Ticker']}", help="Delete this holding"):
+                        delete_holding(row['Ticker'])
+                        st.cache_data.clear()
+                        st.success(f"✅ Deleted {row['Ticker']}")
+                        st.rerun()
+
+        # Also keep the full table for overview
         styled_df = portfolio_df.style.format({
             "Cost Basis": "${:.2f}",
             "Current Price": lambda x: f"${x:.2f}" if isinstance(x, (int, float)) else str(x),
