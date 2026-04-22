@@ -192,7 +192,7 @@ def call_grok(prompt, conversation_history=None):
     except Exception as e:
         return f"❌ Request Error: {str(e)}"
 
-# ----------------- FULL ANALYSIS (Detailed Prompt) -----------------
+# ----------------- FULL ANALYSIS (Detailed) -----------------
 def run_full_analysis(selected_account):
     today = datetime.now().strftime("%B %d, %Y")
     portfolio_df = calculate_portfolio(selected_account)
@@ -239,6 +239,9 @@ Be very detailed, specific, and actionable. Use clear headings and bullet points
     with st.spinner(f"Generating full detailed analysis for {selected_account}..."):
         result = call_grok(prompt)
         st.session_state.full_analysis = result
+        # Initialize conversation history if it doesn't exist
+        if "conversation_history" not in st.session_state:
+            st.session_state.conversation_history = []
         st.session_state.conversation_history = [
             {"role": "user", "content": prompt},
             {"role": "assistant", "content": result}
@@ -287,12 +290,16 @@ with tab1:
             unsafe_allow_html=True
         )
         
-        user_question = st.text_input("Your question:", placeholder="Type your question here...")
+        user_question = st.text_input("Your question:", placeholder="Type your question here...", key="followup_input")
         
-        if st.button("Send Question to Grok"):
+        if st.button("Send Question to Grok", key="send_followup"):
             if user_question.strip():
                 with st.spinner("Getting clarification from Grok..."):
-                    response = call_grok(user_question, st.session_state.get("conversation_history", []))
+                    # Ensure conversation_history exists
+                    if "conversation_history" not in st.session_state:
+                        st.session_state.conversation_history = []
+                    
+                    response = call_grok(user_question, st.session_state.conversation_history)
                     st.session_state.conversation_history.append({"role": "user", "content": user_question})
                     st.session_state.conversation_history.append({"role": "assistant", "content": response})
                     st.markdown("**Grok's Response:**")
