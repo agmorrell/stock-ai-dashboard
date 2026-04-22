@@ -91,12 +91,12 @@ def clear_all_pending_orders():
     conn.commit()
     conn.close()
 
-# ----------------- PORTFOLIO CALCULATION (with Sector) -----------------
+# ----------------- PORTFOLIO CALCULATION (with Sector + 1D Change) -----------------
 @st.cache_data(ttl=300)
 def calculate_portfolio():
     df = load_holdings()
     if df.empty:
-        return pd.DataFrame(columns=['Ticker','Shares','Cost Basis','Current Price','Current Value','Unrealized Gain $','Unrealized Gain %','Sector'])
+        return pd.DataFrame(columns=['Ticker','Shares','Cost Basis','Current Price','Current Value','Unrealized Gain $','Unrealized Gain %','Sector','Today % Change'])
     
     data = []
     for _, row in df.iterrows():
@@ -107,6 +107,9 @@ def calculate_portfolio():
             info = ticker.info
             current_price = float(info.get('currentPrice') or info.get('regularMarketPrice') or info.get('previousClose') or 0.0)
             sector = info.get('sector') or "Other"
+            
+            # Get today's % change
+            day_change = info.get('regularMarketChangePercent') or 0.0
             
             current_value = row['shares'] * current_price
             cost = row['shares'] * row['cost_basis']
@@ -121,7 +124,8 @@ def calculate_portfolio():
                 'Current Value': round(current_value, 2),
                 'Unrealized Gain $': round(gain_dollar, 2),
                 'Unrealized Gain %': round(gain_pct, 2),
-                'Sector': sector
+                'Sector': sector,
+                'Today % Change': round(day_change, 2)
             })
         except Exception:
             data.append({
@@ -132,12 +136,13 @@ def calculate_portfolio():
                 'Current Value': "N/A",
                 'Unrealized Gain $': "N/A",
                 'Unrealized Gain %': "N/A",
-                'Sector': "Other"
+                'Sector': "Other",
+                'Today % Change': "N/A"
             })
     
     return pd.DataFrame(data)
 
-# ----------------- GROK API -----------------
+# ----------------- GROK API (unchanged) -----------------
 def call_grok(prompt, conversation_history=None):
     api_key = os.environ.get("GROK_API_KEY")
     if not api_key:
@@ -160,7 +165,7 @@ def call_grok(prompt, conversation_history=None):
     except Exception as e:
         return f"❌ Request Error: {str(e)}"
 
-# ----------------- FULL ANALYSIS -----------------
+# ----------------- FULL ANALYSIS (unchanged) -----------------
 def run_full_analysis():
     today = datetime.now().strftime("%B %d, %Y")
     portfolio_df = calculate_portfolio()
@@ -275,7 +280,7 @@ with tab2:
 
     st.divider()
 
-    # Add Holding + Pending Orders + Clear buttons (unchanged)
+    # Add Holding
     with st.expander("➕ Add or Update Holding"):
         col1, col2, col3 = st.columns(3)
         with col1:
@@ -291,6 +296,7 @@ with tab2:
                 st.success(f"✅ {ticker} saved!")
                 st.rerun()
 
+    # Add Pending Order
     with st.expander("📋 Add Pending Order"):
         col1, col2 = st.columns(2)
         with col1:
@@ -305,6 +311,7 @@ with tab2:
                 st.success(f"✅ Pending {po_type} for {po_ticker} added!")
                 st.rerun()
 
+    # Clear All Buttons
     col_clear1, col_clear2 = st.columns(2)
     with col_clear1:
         if st.button("🗑️ Clear All Holdings"):
@@ -355,16 +362,18 @@ with tab2:
 
     st.divider()
 
-    # Display Holdings
+    # Display Holdings + Daily 1D Change
     if not portfolio_df.empty:
-        st.subheader("Current Holdings")
+        st.subheader("Current Holdings + Daily Performance")
         styled_df = portfolio_df.style.format({
             "Cost Basis": "${:.2f}",
             "Current Price": lambda x: f"${x:.2f}" if isinstance(x, (int, float)) else str(x),
             "Current Value": lambda x: f"${x:.2f}" if isinstance(x, (int, float)) else str(x),
             "Unrealized Gain $": lambda x: f"${x:.2f}" if isinstance(x, (int, float)) else str(x),
-            "Unrealized Gain %": lambda x: f"{x:.2f}%" if isinstance(x, (int, float)) else str(x)
-        })
+            "Unrealized Gain %": lambda x: f"{x:.2f}%" if isinstance(x, (int, float)) else str(x),
+            "Today % Change": lambda x: f"{x:.2f}%" if isinstance(x, (int, float)) else str(x)
+        }).apply(lambda x: ['color: green' if isinstance(v, (int, float)) and v > 0 else 'color: red' if isinstance(v, (int, float)) and v < 0 else '' for v in x], subset=['Today % Change'])
+        
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
         st.divider()
@@ -394,27 +403,11 @@ with tab2:
                             color_continuous_scale='RdYlGn')
             st.plotly_chart(fig_bar, use_container_width=True)
 
-    # New: Sector Allocation % Chart
+    # Sector Allocation
     if not portfolio_df.empty:
         st.subheader("Sector Allocation (%)")
-        
-        # Add real sector from yfinance
-        sectors = []
-        for ticker_symbol in portfolio_df['Ticker']:
-            try:
-                t = Ticker(ticker_symbol)
-                sector = t.info.get('sector') or "Other"
-            except:
-                sector = "Other"
-            sectors.append(sector)
-        
-        portfolio_df['Sector'] = sectors
-        
-        # Group by sector
         sector_df = portfolio_df.groupby('Sector')['Current Value'].sum().reset_index()
         sector_df['Percentage'] = (sector_df['Current Value'] / total_holdings_value * 100) if total_holdings_value > 0 else 0
-        
-        # Add Cash as a sector
         sector_df.loc[len(sector_df)] = ['Cash', cash, (cash / total_portfolio_value * 100) if total_portfolio_value > 0 else 0]
         
         fig_sector = px.bar(
@@ -428,7 +421,7 @@ with tab2:
             color_continuous_scale='Blues'
         )
         fig_sector.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-        fig_sector.update_layout(xaxis_title="Percentage of Total Portfolio (%)", yaxis_title="")
+        fig_sector.update_layout(xaxis_title="Percentage of Total Portfolio (%)")
         st.plotly_chart(fig_sector, use_container_width=True)
 
     # Pending Orders
