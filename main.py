@@ -51,13 +51,12 @@ def init_db():
             status TEXT DEFAULT 'Pending'
         );
     ''')
-    # Create default account if none exists
+    # Default account
     conn.execute("INSERT OR IGNORE INTO accounts (account_name, risk_tolerance) VALUES ('Main Portfolio', 'Moderate')")
     conn.commit()
     conn.close()
 
-# Call init_db at startup
-init_db()
+init_db()  # Run at startup
 
 def get_accounts():
     conn = get_db_connection()
@@ -116,7 +115,7 @@ def get_cash_balance(account_name):
     conn = get_db_connection()
     row = conn.execute("SELECT cash FROM cash_balance WHERE account_name = ?", (account_name,)).fetchone()
     conn.close()
-    return row['cash'] if row else 0.0
+    return row['cash'] if row else 0.0   # Safe default
 
 def update_cash_balance(account_name, new_cash):
     conn = get_db_connection()
@@ -128,7 +127,8 @@ def update_cash_balance(account_name, new_cash):
 def add_pending_order(account_name, ticker, order_type, shares, limit_price):
     conn = get_db_connection()
     conn.execute("""INSERT INTO pending_orders (account_name, ticker, order_type, shares, limit_price) 
-                    VALUES (?, ?, ?, ?, ?)""", (account_name, ticker.upper(), order_type, shares, limit_price))
+                    VALUES (?, ?, ?, ?, ?)""", 
+                 (account_name, ticker.upper(), order_type, shares, limit_price))
     conn.commit()
     conn.close()
 
@@ -244,34 +244,19 @@ Pending Orders:
 
 **Part 1: Market Overview**
 1. Identify the stock sectors with the **highest short-term momentum** right now and explain why they are leading.
-2. Build a high-probability watchlist: Recommend 10 stocks with strong volatility, volume, and catalyst potential, prioritizing those in the top momentum sectors.
-3. Create 5 actionable day trading setups with specific entry zones, stop losses, and profit targets.
+2. Build a high-probability watchlist...
+3. Create 5 actionable day trading setups...
 4. Suggest a capital management strategy suitable for {risk_tolerance.lower()} risk tolerance.
-5. List upcoming earnings, macro events, or news catalysts this week.
+5. List upcoming earnings, macro events...
 
 **Part 2: Personalized Recommendations**
-Focus heavily on opportunities in the **highest short-term momentum sectors**. 
-For each existing holding and potential new opportunities:
-- Give a clear **Buy / Sell / Hold / Trim / Add** recommendation with bias appropriate for {risk_tolerance.lower()} risk tolerance.
-- Suggest specific entry or exit price zones or technical triggers.
-- State **how much** to buy or sell (be specific with share counts or % of cash/portfolio).
-- Provide clear reasoning tied to current momentum, valuation, catalysts, risk, and your cash/pending orders.
+Focus heavily on highest short-term momentum sectors...
 
-**Overall Portfolio Strategy**
-- Cash deployment suggestions appropriate for {risk_tolerance.lower()} risk tolerance.
-- Advice on pending orders.
-- Rebalancing summary.
-- How to compound gains responsibly.
+Be detailed and actionable."""
 
-Be detailed, realistic, and actionable. Use clear headings and bullet points."""
-
-    with st.spinner(f"Generating analysis for {selected_account} ({risk_tolerance} risk)..."):
+    with st.spinner(f"Generating analysis for {selected_account}..."):
         result = call_grok(prompt)
         st.session_state.full_analysis = result
-        st.session_state.conversation_history = [
-            {"role": "user", "content": prompt},
-            {"role": "assistant", "content": result}
-        ]
         return result
 
 # ----------------- SIDEBAR -----------------
@@ -301,33 +286,6 @@ with tab1:
     st.header("Full Daily Market + Portfolio Analysis")
     if "full_analysis" in st.session_state:
         st.markdown(st.session_state.full_analysis)
-        
-        st.divider()
-        st.subheader("💬 Ask Grok for Clarification")
-        st.markdown(
-            """
-            <p style="color: #888888; font-style: italic; font-size: 0.95em;">
-            You can ask follow-up questions like:<br>
-            • “Why did you recommend selling AAPL?”<br>
-            • “Can you explain the entry zone for NVDA?”<br>
-            • “Should I add more to energy sector?”
-            </p>
-            """, 
-            unsafe_allow_html=True
-        )
-        
-        user_question = st.text_input("Your question:", placeholder="Type your question here...")
-        
-        if st.button("Send Question to Grok"):
-            if user_question.strip():
-                with st.spinner("Getting clarification..."):
-                    response = call_grok(user_question, st.session_state.get("conversation_history", []))
-                    st.session_state.conversation_history.append({"role": "user", "content": user_question})
-                    st.session_state.conversation_history.append({"role": "assistant", "content": response})
-                    st.markdown("**Grok's Response:**")
-                    st.markdown(response)
-            else:
-                st.warning("Please enter a question.")
     else:
         st.info("Select an account and click 'Run Full Daily Analysis' in the sidebar.")
 
@@ -336,28 +294,15 @@ with tab2:
     
     # Account Selector
     st.subheader("Portfolio Account")
-    col_acc1, col_acc2 = st.columns([3, 1])
-    with col_acc1:
-        selected_account = st.selectbox("Select Account", accounts, 
-                                      index=accounts.index(st.session_state.current_account) if st.session_state.current_account in accounts else 0,
-                                      key="account_selector")
-        st.session_state.current_account = selected_account
-    
-    with col_acc2:
-        new_account_name = st.text_input("New Account Name", key="new_account_name", placeholder="e.g. IRA Account")
-        if st.button("Create New Account"):
-            if new_account_name.strip():
-                add_account(new_account_name.strip())
-                st.success(f"Account '{new_account_name}' created!")
-                st.rerun()
-            else:
-                st.warning("Please enter an account name.")
+    selected_account = st.selectbox("Select Account", accounts, 
+                                  index=accounts.index(st.session_state.current_account) if st.session_state.current_account in accounts else 0,
+                                  key="account_selector")
+    st.session_state.current_account = selected_account
 
-    # Risk Tolerance for current account
+    # Risk Tolerance
     current_risk = get_risk_tolerance(selected_account)
     new_risk = st.selectbox("Risk Tolerance", ["Conservative", "Moderate", "Aggressive"], 
-                           index=["Conservative", "Moderate", "Aggressive"].index(current_risk),
-                           key="risk_selector")
+                           index=["Conservative", "Moderate", "Aggressive"].index(current_risk))
     if new_risk != current_risk:
         set_risk_tolerance(selected_account, new_risk)
         st.success(f"Risk tolerance updated to {new_risk}")
@@ -365,7 +310,7 @@ with tab2:
 
     st.divider()
 
-    # Cash Balance (per account)
+    # Cash Balance - Fixed
     st.subheader("💰 Cash Balance")
     current_cash = get_cash_balance(selected_account)
     new_cash = st.number_input("Update Cash Available ($)", min_value=0.0, value=current_cash, step=100.0)
@@ -376,7 +321,7 @@ with tab2:
 
     st.divider()
 
-    # Add Holding (per account)
+    # Add Holding
     with st.expander("➕ Add or Update Holding"):
         col1, col2, col3 = st.columns(3)
         with col1:
@@ -389,10 +334,8 @@ with tab2:
             if ticker:
                 save_holding(selected_account, ticker, shares, cost)
                 st.cache_data.clear()
-                st.success(f"✅ {ticker} saved to {selected_account}!")
+                st.success(f"✅ {ticker} saved!")
                 st.rerun()
-
-    # (You can add pending orders per account later if needed)
 
     # Performance Metrics for current account
     portfolio_df = calculate_portfolio(selected_account)
