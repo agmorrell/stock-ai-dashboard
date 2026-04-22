@@ -51,12 +51,11 @@ def init_db():
             status TEXT DEFAULT 'Pending'
         );
     ''')
-    # Default account
     conn.execute("INSERT OR IGNORE INTO accounts (account_name, risk_tolerance) VALUES ('Main Portfolio', 'Moderate')")
     conn.commit()
     conn.close()
 
-init_db()  # Run at startup
+init_db()
 
 def get_accounts():
     conn = get_db_connection()
@@ -115,7 +114,7 @@ def get_cash_balance(account_name):
     conn = get_db_connection()
     row = conn.execute("SELECT cash FROM cash_balance WHERE account_name = ?", (account_name,)).fetchone()
     conn.close()
-    return row['cash'] if row else 0.0   # Safe default
+    return row['cash'] if row else 0.0
 
 def update_cash_balance(account_name, new_cash):
     conn = get_db_connection()
@@ -250,9 +249,9 @@ Pending Orders:
 5. List upcoming earnings, macro events...
 
 **Part 2: Personalized Recommendations**
-Focus heavily on highest short-term momentum sectors...
+Focus heavily on opportunities in the **highest short-term momentum sectors**.
 
-Be detailed and actionable."""
+Be detailed and actionable. Use clear headings and bullet points."""
 
     with st.spinner(f"Generating analysis for {selected_account}..."):
         result = call_grok(prompt)
@@ -273,12 +272,6 @@ with st.sidebar:
         st.cache_data.clear()
         st.success("Prices refreshed!")
 
-# ----------------- ACCOUNT MANAGEMENT -----------------
-if "current_account" not in st.session_state:
-    st.session_state.current_account = "Main Portfolio"
-
-accounts = get_accounts()
-
 # ----------------- TABS -----------------
 tab1, tab2 = st.tabs(["📈 Full Analysis", "💼 My Portfolio"])
 
@@ -292,17 +285,36 @@ with tab1:
 with tab2:
     st.header("Portfolio Tracker")
     
-    # Account Selector
+    # Account Selector + New Account
     st.subheader("Portfolio Account")
-    selected_account = st.selectbox("Select Account", accounts, 
-                                  index=accounts.index(st.session_state.current_account) if st.session_state.current_account in accounts else 0,
-                                  key="account_selector")
-    st.session_state.current_account = selected_account
+    accounts = get_accounts()
+    
+    col1, col2 = st.columns([3, 2])
+    with col1:
+        selected_account = st.selectbox(
+            "Select Account", 
+            accounts, 
+            index=accounts.index(st.session_state.get("current_account", "Main Portfolio")) 
+                  if st.session_state.get("current_account") in accounts else 0,
+            key="account_selector"
+        )
+        st.session_state.current_account = selected_account
+
+    with col2:
+        new_account_name = st.text_input("New Account Name", placeholder="e.g. IRA Account", key="new_account_input")
+        if st.button("Create New Account", key="create_account_btn"):
+            if new_account_name.strip():
+                add_account(new_account_name.strip())
+                st.success(f"✅ Account '{new_account_name}' created!")
+                st.rerun()
+            else:
+                st.warning("Please enter an account name.")
 
     # Risk Tolerance
     current_risk = get_risk_tolerance(selected_account)
     new_risk = st.selectbox("Risk Tolerance", ["Conservative", "Moderate", "Aggressive"], 
-                           index=["Conservative", "Moderate", "Aggressive"].index(current_risk))
+                           index=["Conservative", "Moderate", "Aggressive"].index(current_risk),
+                           key="risk_selector")
     if new_risk != current_risk:
         set_risk_tolerance(selected_account, new_risk)
         st.success(f"Risk tolerance updated to {new_risk}")
@@ -310,7 +322,7 @@ with tab2:
 
     st.divider()
 
-    # Cash Balance - Fixed
+    # Cash Balance
     st.subheader("💰 Cash Balance")
     current_cash = get_cash_balance(selected_account)
     new_cash = st.number_input("Update Cash Available ($)", min_value=0.0, value=current_cash, step=100.0)
@@ -334,7 +346,7 @@ with tab2:
             if ticker:
                 save_holding(selected_account, ticker, shares, cost)
                 st.cache_data.clear()
-                st.success(f"✅ {ticker} saved!")
+                st.success(f"✅ {ticker} saved to {selected_account}!")
                 st.rerun()
 
     # Performance Metrics for current account
