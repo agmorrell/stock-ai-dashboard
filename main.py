@@ -262,10 +262,162 @@ with tab1:
 
 with tab2:
     st.header("Portfolio Tracker")
-    # [Your existing portfolio tab code remains unchanged]
-    # Cash, holdings, pending orders, metrics, charts, etc.
-    # (Copy the entire tab2 section from the previous working version)
+    
+    # Cash Balance
+    st.subheader("💰 Cash Balance")
+    current_cash = get_cash_balance()
+    new_cash = st.number_input("Update Cash Available ($)", min_value=0.0, value=current_cash, step=100.0)
+    if st.button("Update Cash Balance"):
+        update_cash_balance(new_cash)
+        st.success(f"Cash updated to ${new_cash:,.2f}")
+        st.rerun()
+
+    st.divider()
+
+    # Add Holding
+    with st.expander("➕ Add or Update Holding"):
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            ticker = st.text_input("Ticker Symbol", placeholder="AAPL", key="hold_ticker").upper()
+        with col2:
+            shares = st.number_input("Shares", min_value=0.01, value=10.0, key="hold_shares")
+        with col3:
+            cost = st.number_input("Cost Basis per Share ($)", min_value=0.01, value=150.0, key="hold_cost")
+        if st.button("Save Holding", type="primary", key="save_hold"):
+            if ticker:
+                save_holding(ticker, shares, cost)
+                st.cache_data.clear()
+                st.success(f"✅ {ticker} saved!")
+                st.rerun()
+
+    # Add Pending Order
+    with st.expander("📋 Add Pending Order"):
+        col1, col2 = st.columns(2)
+        with col1:
+            po_ticker = st.text_input("Ticker", placeholder="NVDA", key="po_ticker").upper()
+            po_type = st.selectbox("Order Type", ["Buy", "Sell"], key="po_type")
+        with col2:
+            po_shares = st.number_input("Shares", min_value=0.01, value=10.0, key="po_shares")
+            po_price = st.number_input("Limit Price ($)", min_value=0.01, value=150.0, key="po_price")
+        if st.button("Add Pending Order", type="primary", key="add_po"):
+            if po_ticker:
+                add_pending_order(po_ticker, po_type, po_shares, po_price)
+                st.success(f"✅ Pending {po_type} for {po_ticker} added!")
+                st.rerun()
+
+    # Clear All Buttons
+    col_clear1, col_clear2 = st.columns(2)
+    with col_clear1:
+        if st.button("🗑️ Clear All Holdings"):
+            if st.checkbox("Confirm delete ALL holdings"):
+                clear_all_holdings()
+                st.cache_data.clear()
+                st.success("All holdings cleared!")
+                st.rerun()
+    with col_clear2:
+        if st.button("🗑️ Clear All Pending Orders"):
+            if st.checkbox("Confirm delete ALL pending orders"):
+                clear_all_pending_orders()
+                st.success("All pending orders cleared!")
+                st.rerun()
+
+    # ================== PORTFOLIO PERFORMANCE METRICS ==================
+    portfolio_df = calculate_portfolio()
+    cash = get_cash_balance()
+    
+    numeric_value = pd.to_numeric(portfolio_df["Current Value"], errors='coerce').fillna(0)
+    numeric_gain = pd.to_numeric(portfolio_df["Unrealized Gain $"], errors='coerce').fillna(0)
+    numeric_return = pd.to_numeric(portfolio_df["Unrealized Gain %"], errors='coerce').fillna(0)
+    
+    total_holdings_value = numeric_value.sum()
+    total_portfolio_value = total_holdings_value + cash
+    total_unrealized_gain = numeric_gain.sum()
+    overall_return_pct = (total_unrealized_gain / (total_holdings_value + 0.0001) * 100) if total_holdings_value > 0 else 0.0
+    num_positions = len(portfolio_df)
+    avg_return_per_position = numeric_return.mean() if num_positions > 0 else 0.0
+    
+    if not portfolio_df.empty and total_holdings_value > 0:
+        largest_pos_pct = (numeric_value.max() / total_holdings_value * 100)
+    else:
+        largest_pos_pct = 0.0
+    
+    cash_pct = (cash / total_portfolio_value * 100) if total_portfolio_value > 0 else 0.0
+
+    st.subheader("📊 Portfolio Performance Metrics")
+    col1, col2, col3, col4, col5, col6 = st.columns(6)
+    with col1:
+        st.metric("Total Portfolio Value", f"${total_portfolio_value:,.2f}")
+    with col2:
+        st.metric("Total Unrealized P/L", f"${total_unrealized_gain:,.2f}", delta=f"{overall_return_pct:.2f}%")
+    with col3:
+        st.metric("Avg Return per Position", f"{avg_return_per_position:.2f}%")
+    with col4:
+        st.metric("Number of Positions", num_positions)
+    with col5:
+        st.metric("Largest Position", f"{largest_pos_pct:.1f}%")
+    with col6:
+        st.metric("Cash Allocation", f"{cash_pct:.1f}%")
+
+    st.divider()
+
+    # Display Holdings
+    if not portfolio_df.empty:
+        st.subheader("Current Holdings")
+        styled_df = portfolio_df.style.format({
+            "Cost Basis": "${:.2f}",
+            "Current Price": lambda x: f"${x:.2f}" if isinstance(x, (int, float)) else str(x),
+            "Current Value": lambda x: f"${x:.2f}" if isinstance(x, (int, float)) else str(x),
+            "Unrealized Gain $": lambda x: f"${x:.2f}" if isinstance(x, (int, float)) else str(x),
+            "Unrealized Gain %": lambda x: f"{x:.2f}%" if isinstance(x, (int, float)) else str(x)
+        })
+        st.dataframe(styled_df, use_container_width=True, hide_index=True)
+
+        st.divider()
+        col_chart1, col_chart2 = st.columns(2)
+        
+        with col_chart1:
+            st.subheader("Portfolio Allocation")
+            numeric_value = pd.to_numeric(portfolio_df["Current Value"], errors='coerce').fillna(0)
+            total_holdings_value = numeric_value.sum()
+            cash = get_cash_balance()
+            
+            if total_holdings_value + cash > 0:
+                alloc_data = portfolio_df[['Ticker', 'Current Value']].copy()
+                alloc_data = alloc_data[pd.to_numeric(alloc_data['Current Value'], errors='coerce').notna()]
+                alloc_data.loc[len(alloc_data)] = ['Cash', cash]
+                
+                fig_pie = px.pie(alloc_data, values='Current Value', names='Ticker', 
+                                title="Portfolio Allocation (Including Cash)", hole=0.45)
+                fig_pie.update_traces(textinfo='percent+label')
+                st.plotly_chart(fig_pie, use_container_width=True)
+        
+        with col_chart2:
+            st.subheader("Gains / Losses")
+            fig_bar = px.bar(portfolio_df, x='Ticker', y='Unrealized Gain $', 
+                            title="Unrealized Profit/Loss by Position",
+                            color='Unrealized Gain %',
+                            color_continuous_scale='RdYlGn')
+            st.plotly_chart(fig_bar, use_container_width=True)
+
+    # Pending Orders with Instant Delete
+    pending_df = load_pending_orders()
+    if not pending_df.empty:
+        st.subheader("📋 Pending Orders")
+        for idx, row in pending_df.iterrows():
+            with st.container(border=True):
+                col1, col2, col3 = st.columns([5, 3, 1])
+                with col1:
+                    st.write(f"**{row['ticker']}** — **{row['order_type']}** {row['shares']} shares @ **${row['limit_price']:.2f}**")
+                with col2:
+                    st.write(f"ID: {row['id']} | Status: {row['status']}")
+                with col3:
+                    if st.button("🗑️", key=f"del_{row['id']}", help="Delete this pending order"):
+                        delete_pending_order(row['id'])
+                        st.cache_data.clear()
+                        st.success(f"✅ Deleted pending order for {row['ticker']}")
+                        st.rerun()
+    else:
+        st.info("No pending orders yet.")
 
     st.info(f"💰 Available Cash: ${get_cash_balance():,.2f}")
-
-st.caption("Built with Streamlit + yfinance + Grok API • Educational use only")
+    st.caption("Built with Streamlit + yfinance + Grok API • Educational use only")
