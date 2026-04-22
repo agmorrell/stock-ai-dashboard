@@ -17,11 +17,12 @@ st.set_page_config(page_title="AI Stock Dashboard", layout="wide")
 st.title("🚀 My Personal AI Stock Dashboard")
 st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M %p EST')}")
 
-# CSS for metrics
+# CSS
 st.markdown("""
     <style>
     div[data-testid="stMetricValue"] { font-size: 1.45em !important; font-weight: 600 !important; }
     div[data-testid="stMetricLabel"] { font-size: 0.85em !important; color: #666666; }
+    .stMarkdown h2, .stMarkdown h3 { margin-top: 1.5em; margin-bottom: 0.8em; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -88,12 +89,6 @@ def delete_holding(account_name, ticker):
     conn.commit()
     conn.close()
 
-def clear_all_holdings(account_name):
-    conn = get_db_connection()
-    conn.execute("DELETE FROM holdings WHERE account_name = ?", (account_name,))
-    conn.commit()
-    conn.close()
-
 def get_cash_balance(account_name):
     conn = get_db_connection()
     row = conn.execute("SELECT cash FROM cash_balance WHERE account_name = ?", (account_name,)).fetchone()
@@ -122,12 +117,6 @@ def load_pending_orders(account_name):
 def delete_pending_order(order_id):
     conn = get_db_connection()
     conn.execute("DELETE FROM pending_orders WHERE id = ?", (order_id,))
-    conn.commit()
-    conn.close()
-
-def clear_all_pending_orders(account_name):
-    conn = get_db_connection()
-    conn.execute("DELETE FROM pending_orders WHERE account_name = ?", (account_name,))
     conn.commit()
     conn.close()
 
@@ -203,7 +192,7 @@ def call_grok(prompt, conversation_history=None):
     except Exception as e:
         return f"❌ Request Error: {str(e)}"
 
-# ----------------- FULL ANALYSIS -----------------
+# ----------------- FULL ANALYSIS (Detailed Prompt) -----------------
 def run_full_analysis(selected_account):
     today = datetime.now().strftime("%B %d, %Y")
     portfolio_df = calculate_portfolio(selected_account)
@@ -223,11 +212,37 @@ Holdings:
 Pending Orders:
 {pending_text}
 
-Focus on highest short-term momentum sectors and provide aggressive but reasoned recommendations."""
+**Part 1: Market Overview**
+1. Identify the stock sectors with the **highest short-term momentum** right now and explain why they are leading.
+2. Build a high-probability watchlist: Recommend 10 stocks with strong volatility, volume, and catalyst potential, prioritizing those in the top momentum sectors.
+3. Create 5 actionable day trading setups with specific entry zones, stop losses, and profit targets.
+4. Suggest a capital management strategy suitable for {risk_tolerance.lower()} risk tolerance.
+5. List upcoming earnings, macro events, or news catalysts this week.
 
-    with st.spinner(f"Generating analysis for {selected_account}..."):
+**Part 2: Personalized Recommendations (Focus on Highest Momentum Sectors)**
+For each existing holding and new opportunities:
+- Give a clear **Buy / Sell / Hold / Trim / Add** recommendation.
+- Suggest specific entry or exit price zones or technical triggers.
+- State **how much** to buy or sell (specific share counts or % of cash/portfolio).
+- Recommend where to diversify or concentrate based on momentum.
+- Provide clear reasoning tied to current momentum, catalysts, risk, and your cash/pending orders.
+- Assign a risk level (Low / Medium / High) and suggest stop-loss ideas.
+
+**Overall Portfolio Strategy**
+- Aggressive cash deployment suggestions focused on highest momentum sectors.
+- Advice on pending orders (keep, modify, or cancel).
+- Rebalancing summary.
+- How to compound daily gains responsibly.
+
+Be very detailed, specific, and actionable. Use clear headings and bullet points."""
+
+    with st.spinner(f"Generating full detailed analysis for {selected_account}..."):
         result = call_grok(prompt)
         st.session_state.full_analysis = result
+        st.session_state.conversation_history = [
+            {"role": "user", "content": prompt},
+            {"role": "assistant", "content": result}
+        ]
         return result
 
 # ----------------- SIDEBAR -----------------
@@ -236,7 +251,7 @@ with st.sidebar:
     if st.button("🔥 Run Full Daily Analysis", type="primary"):
         if "current_account" in st.session_state:
             run_full_analysis(st.session_state.current_account)
-            st.success("✅ Analysis complete!")
+            st.success("✅ Full detailed analysis ready!")
         else:
             st.error("Please select an account first.")
 
@@ -257,8 +272,35 @@ with tab1:
     st.header("Full Daily Market + Portfolio Analysis")
     if "full_analysis" in st.session_state:
         st.markdown(st.session_state.full_analysis)
+        
+        st.divider()
+        st.subheader("💬 Ask Grok for Clarification")
+        st.markdown(
+            """
+            <p style="color: #888888; font-style: italic; font-size: 0.95em;">
+            You can ask follow-up questions like:<br>
+            • “Why did you recommend selling AAPL?”<br>
+            • “Can you explain the entry zone for NVDA?”<br>
+            • “Should I add more to energy sector?”
+            </p>
+            """, 
+            unsafe_allow_html=True
+        )
+        
+        user_question = st.text_input("Your question:", placeholder="Type your question here...")
+        
+        if st.button("Send Question to Grok"):
+            if user_question.strip():
+                with st.spinner("Getting clarification from Grok..."):
+                    response = call_grok(user_question, st.session_state.get("conversation_history", []))
+                    st.session_state.conversation_history.append({"role": "user", "content": user_question})
+                    st.session_state.conversation_history.append({"role": "assistant", "content": response})
+                    st.markdown("**Grok's Response:**")
+                    st.markdown(response)
+            else:
+                st.warning("Please enter a question.")
     else:
-        st.info("Select an account and click 'Run Full Daily Analysis'.")
+        st.info("Select an account and click 'Run Full Daily Analysis' in the sidebar.")
 
 with tab2:
     st.header("Portfolio Tracker")
@@ -319,7 +361,7 @@ with tab2:
                 st.success(f"✅ {ticker} saved!")
                 st.rerun()
 
-    # Performance Metrics
+    # Portfolio Data
     portfolio_df = calculate_portfolio(selected_account)
     cash = get_cash_balance(selected_account)
     
@@ -354,44 +396,36 @@ with tab2:
 
     st.divider()
 
-    # Current Holdings
+    # Holdings Table
     if not portfolio_df.empty:
         st.subheader("Current Holdings")
         styled_df = portfolio_df.style.format({
             "Cost Basis": "${:.2f}",
-            "Current Price": lambda x: f"${x:.2f}" if isinstance(x, (int, float)) else str(x),
-            "Current Value": lambda x: f"${x:.2f}" if isinstance(x, (int, float)) else str(x),
-            "Unrealized Gain $": lambda x: f"${x:.2f}" if isinstance(x, (int, float)) else str(x),
-            "Unrealized Gain %": lambda x: f"{x:.2f}%" if isinstance(x, (int, float)) else str(x),
-            "Today % Change": lambda x: f"{x:.2f}%" if isinstance(x, (int, float)) else str(x)
-        }).apply(lambda x: ['color: #00cc00' if isinstance(v, (int, float)) and v > 0 else 'color: #ff4444' if isinstance(v, (int, float)) and v < 0 else '' for v in x], subset=['Today % Change'])
-        
+            "Current Price": lambda x: f"${x:.2f}" if isinstance(x, (int, float)) else x,
+            "Current Value": lambda x: f"${x:.2f}" if isinstance(x, (int, float)) else x,
+            "Unrealized Gain $": lambda x: f"${x:.2f}" if isinstance(x, (int, float)) else x,
+            "Unrealized Gain %": lambda x: f"{x:.2f}%" if isinstance(x, (int, float)) else x,
+            "Today % Change": lambda x: f"{x:.2f}%" if isinstance(x, (int, float)) else x
+        })
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
-        st.divider()
-
     # Portfolio Allocation Pie Chart
-    if not portfolio_df.empty:
+    if total_portfolio_value > 0:
         st.subheader("Portfolio Allocation")
-        numeric_value = pd.to_numeric(portfolio_df["Current Value"], errors='coerce').fillna(0)
-        total_holdings_value = numeric_value.sum()
-        cash = get_cash_balance(selected_account)
-        
-        if total_holdings_value + cash > 0:
-            alloc_data = portfolio_df[['Ticker', 'Current Value']].copy()
-            alloc_data = alloc_data[pd.to_numeric(alloc_data['Current Value'], errors='coerce').notna()]
+        alloc_data = portfolio_df[['Ticker', 'Current Value']].copy()
+        alloc_data = alloc_data[pd.to_numeric(alloc_data['Current Value'], errors='coerce').notna()]
+        if not alloc_data.empty:
             alloc_data.loc[len(alloc_data)] = ['Cash', cash]
-            
             fig_pie = px.pie(alloc_data, values='Current Value', names='Ticker', 
                             title="Portfolio Allocation (Including Cash)", hole=0.45)
             fig_pie.update_traces(textinfo='percent+label')
             st.plotly_chart(fig_pie, use_container_width=True)
 
     # Sector Allocation Bar Chart
-    if not portfolio_df.empty:
+    if not portfolio_df.empty and total_holdings_value > 0:
         st.subheader("Sector Allocation (%)")
         sector_df = portfolio_df.groupby('Sector')['Current Value'].sum().reset_index()
-        sector_df['Percentage'] = (sector_df['Current Value'] / total_holdings_value * 100) if total_holdings_value > 0 else 0
+        sector_df['Percentage'] = (sector_df['Current Value'] / total_holdings_value * 100)
         sector_df.loc[len(sector_df)] = ['Cash', cash, (cash / total_portfolio_value * 100) if total_portfolio_value > 0 else 0]
         sector_df = sector_df.sort_values('Percentage', ascending=False)
         
@@ -409,29 +443,6 @@ with tab2:
         fig_sector.update_layout(xaxis_title="Percentage of Total Portfolio (%)")
         st.plotly_chart(fig_sector, use_container_width=True)
 
-    # Intraday Charts
-    if not portfolio_df.empty:
-        st.subheader("📈 Intraday Charts (1D) with Cost Basis")
-        st.caption("Today's price movement — solid red line = your cost basis per share")
-
-        cols = st.columns(3)
-        for i, row in portfolio_df.iterrows():
-            ticker_symbol = row['Ticker']
-            cost_basis = row['Cost Basis']
-            with cols[i % 3]:
-                try:
-                    t = Ticker(ticker_symbol)
-                    hist = t.history(period="1d", interval="5m")
-                    if not hist.empty:
-                        fig = go.Figure()
-                        fig.add_trace(go.Scatter(x=hist.index, y=hist['Close'], mode='lines', line=dict(color='#1f77b4')))
-                        fig.add_hline(y=cost_basis, line_dash="solid", line_color="red", line_width=2.5,
-                                      annotation_text=f"Cost Basis (${cost_basis:.2f})", annotation_position="top right")
-                        fig.update_layout(title=f"{ticker_symbol} Today", height=280)
-                        st.plotly_chart(fig, use_container_width=True, key=f"chart_{i}")
-                except:
-                    st.info(f"No chart for {ticker_symbol}")
-
-    st.info(f"💰 Available Cash: ${get_cash_balance(selected_account):,.2f}")
+    st.info(f"💰 Available Cash: ${cash:,.2f}")
 
 st.caption("Built with Streamlit + yfinance + Grok API • Educational use only")
