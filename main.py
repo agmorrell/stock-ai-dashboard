@@ -326,7 +326,7 @@ with tab2:
                 st.success("All pending orders cleared!")
                 st.rerun()
 
-    # Performance Metrics
+    # ================== PORTFOLIO PERFORMANCE METRICS (Fixed Font Size) ==================
     portfolio_df = calculate_portfolio()
     cash = get_cash_balance()
     
@@ -345,6 +345,20 @@ with tab2:
     cash_pct = (cash / total_portfolio_value * 100) if total_portfolio_value > 0 else 0.0
 
     st.subheader("📊 Portfolio Performance Metrics")
+    
+    # Custom CSS for consistent, larger metric values (no "...")
+    st.markdown("""
+        <style>
+        div[data-testid="stMetricValue"] {
+            font-size: 1.35em !important;
+            font-weight: 600;
+        }
+        div[data-testid="stMetricLabel"] {
+            font-size: 0.85em !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
     col1, col2, col3, col4, col5, col6 = st.columns(6)
     with col1:
         st.metric("Total Portfolio Value", f"${total_portfolio_value:,.2f}")
@@ -377,10 +391,10 @@ with tab2:
 
         st.divider()
 
-    # ================== INTRADAY CHARTS WITH COST BASIS LINE ==================
+    # Intraday Charts with Cost Basis Line
     if not portfolio_df.empty:
         st.subheader("📈 Intraday Charts (1D) with Cost Basis")
-        st.caption("Today's price movement (solid red line = your cost basis per share)")
+        st.caption("Today's price movement — solid red line = your cost basis per share")
 
         cols = st.columns(3)
         for i, row in portfolio_df.iterrows():
@@ -395,7 +409,6 @@ with tab2:
                     if not hist.empty:
                         fig = go.Figure()
                         
-                        # Price line
                         fig.add_trace(go.Scatter(
                             x=hist.index,
                             y=hist['Close'],
@@ -404,12 +417,11 @@ with tab2:
                             line=dict(color='#1f77b4', width=2)
                         ))
                         
-                        # Solid red cost basis line
                         fig.add_hline(
                             y=cost_basis,
                             line_dash="solid",
                             line_color="red",
-                            line_width=2,
+                            line_width=2.5,
                             annotation_text=f"Cost Basis (${cost_basis:.2f})",
                             annotation_position="top right",
                             annotation_font_size=11,
