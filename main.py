@@ -17,58 +17,55 @@ st.set_page_config(page_title="AI Stock Dashboard", layout="wide")
 st.title("🚀 My Personal AI Stock Dashboard")
 st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M %p EST')}")
 
-# Improved CSS for consistent fonts across the entire app, especially Full Analysis
+# Stronger CSS for clean, consistent spacing in Full Analysis tab
 st.markdown("""
     <style>
-    /* Overall font consistency */
-    .stMarkdown, .stMarkdown p, .stMarkdown li, .stMarkdown span {
+    /* Base font and spacing for all markdown content */
+    .stMarkdown, .stMarkdown p, .stMarkdown li {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        line-height: 1.65;
-        font-size: 1.02em;
+        font-size: 1.05em;
+        line-height: 1.75;
+        margin-bottom: 1.1em;
     }
     
-    /* Headings in analysis */
-    .stMarkdown h1 { 
-        font-size: 1.8em; 
-        margin-top: 1.8em; 
-        margin-bottom: 0.6em;
-        color: #1f77b4;
-    }
-    .stMarkdown h2 { 
-        font-size: 1.5em; 
-        margin-top: 1.6em; 
-        margin-bottom: 0.5em;
-        color: #1f77b4;
-    }
-    .stMarkdown h3 { 
-        font-size: 1.3em; 
-        margin-top: 1.4em; 
-        margin-bottom: 0.4em;
-        color: #1f77b4;
-        border-left: 4px solid #1f77b4;
-        padding-left: 12px;
+    /* Better heading spacing */
+    .stMarkdown h1 { font-size: 1.85em; margin: 2em 0 0.8em 0; color: #1f77b4; }
+    .stMarkdown h2 { font-size: 1.55em; margin: 1.8em 0 0.7em 0; color: #1f77b4; }
+    .stMarkdown h3 { font-size: 1.35em; margin: 1.6em 0 0.6em 0; color: #1f77b4; border-left: 5px solid #1f77b4; padding-left: 14px; }
+    
+    /* Fix run-on text and improve readability */
+    .stMarkdown p {
+        white-space: pre-wrap;
+        word-break: break-word;
     }
     
-    /* Lists and paragraphs */
+    /* Better list spacing */
     .stMarkdown ul, .stMarkdown ol {
         padding-left: 1.8em;
-        margin-bottom: 1em;
+        margin-bottom: 1.4em;
     }
     .stMarkdown li {
-        margin-bottom: 0.4em;
+        margin-bottom: 0.65em;
+        padding-left: 0.3em;
     }
     
-    /* Make day trading setups stand out nicely */
-    .stMarkdown h3 + ul, .stMarkdown h3 + ol {
+    /* Highlight day trading setups section */
+    .stMarkdown h3 + ul, .stMarkdown h3 + ol, .stMarkdown h3 + p {
         background-color: #f8f9fa;
-        padding: 1em;
+        padding: 1.2em 1.4em;
         border-radius: 8px;
-        border-left: 5px solid #1f77b4;
+        border-left: 6px solid #1f77b4;
+        margin: 1.2em 0;
+    }
+    
+    /* Make numbers and recommendations easier to read */
+    .stMarkdown strong {
+        color: #1f77b4;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# ----------------- DATABASE -----------------
+# ----------------- DATABASE (unchanged) -----------------
 def get_db_connection():
     conn = sqlite3.connect('portfolio.db')
     conn.row_factory = sqlite3.Row
@@ -411,7 +408,7 @@ with tab2:
         )
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
-    # Intraday Charts with Cost Basis
+    # Intraday Charts
     if not df.empty:
         st.subheader("📈 Intraday Charts (1D) with Cost Basis")
         st.caption("Solid red line = your cost basis per share")
