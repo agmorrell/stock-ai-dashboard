@@ -180,7 +180,7 @@ def call_grok(prompt, history=None):
             timeout=120
         )
         if response.status_code != 200:
-            return f"❌ API Error {response.status_code}: {response.text[:200]}"
+            return f"❌ API Error {response.status_code}"
         return response.json()['choices'][0]['message']['content']
     except Exception as e:
         return f"❌ Request Error: {str(e)}"
@@ -337,39 +337,66 @@ with tab2:
     # Portfolio Data
     df = calculate_portfolio(selected)
     cash = get_cash_balance(selected)
+    total_value = (df["Current Value"].sum() if not df.empty else 0) + cash
 
-    # Metrics
+    # Metrics with proper formatting
     st.subheader("📊 Performance Metrics")
     cols = st.columns(6)
-    total_value = df["Current Value"].sum() + cash if not df.empty else cash
     with cols[0]: st.metric("Total Value", f"${total_value:,.2f}")
-    with cols[1]: st.metric("Unrealized P/L", f"${df['Unrealized Gain $'].sum():,.2f}" if not df.empty else "$0")
-    with cols[2]: st.metric("Avg Return %", f"{df['Unrealized Gain %'].mean():.2f}%" if not df.empty else "0%")
+    with cols[1]: st.metric("Unrealized P/L", f"${df['Unrealized Gain $'].sum():,.2f}" if not df.empty else "$0.00")
+    with cols[2]: st.metric("Avg Return %", f"{df['Unrealized Gain %'].mean():.2f}%" if not df.empty else "0.00%")
     with cols[3]: st.metric("Positions", len(df))
-    with cols[4]: st.metric("Cash %", f"{(cash/total_value*100):.1f}%" if total_value > 0 else "0%")
+    with cols[4]: st.metric("Largest Position %", f"{(df['Current Value'].max() / total_value * 100):.2f}%" if not df.empty and total_value > 0 else "0.00%")
+    with cols[5]: st.metric("Cash %", f"{(cash / total_value * 100):.2f}%" if total_value > 0 else "0.00%")
 
     st.divider()
 
-    # Holdings
+    # Holdings Table with proper formatting
     if not df.empty:
         st.subheader("Current Holdings")
-        st.dataframe(df.style.format({"Current Price":"${:.2f}", "Current Value":"${:.2f}", 
-                                      "Unrealized Gain $":"${:.2f}", "Unrealized Gain %":"{:.2f}%"}), 
-                     use_container_width=True, hide_index=True)
+        display_df = df.copy()
+        display_df = display_df.style.format({
+            "Cost Basis": "${:.2f}",
+            "Current Price": "${:.2f}",
+            "Current Value": "${:.2f}",
+            "Unrealized Gain $": "${:.2f}",
+            "Unrealized Gain %": "{:.2f}%",
+            "Today % Change": "{:.2f}%"
+        })
+        st.dataframe(display_df, use_container_width=True, hide_index=True)
 
-    # Charts
-    if not df.empty and total_value > 0:
+    # Allocation Charts with better labels
+    if total_value > 0:
         st.subheader("Allocation Charts")
         c1, c2 = st.columns(2)
+        
         with c1:
-            pie_data = df[['Ticker','Current Value']].copy()
+            pie_data = df[['Ticker', 'Current Value']].copy()
             pie_data.loc[len(pie_data)] = ['Cash', cash]
-            st.plotly_chart(px.pie(pie_data, values='Current Value', names='Ticker', hole=0.45), use_container_width=True)
+            fig_pie = px.pie(pie_data, values='Current Value', names='Ticker', 
+                            title="Portfolio Allocation (Including Cash)", hole=0.45)
+            fig_pie.update_traces(textinfo='percent+label', textfont_size=12)
+            st.plotly_chart(fig_pie, use_container_width=True)
+
         with c2:
             sector_df = df.groupby('Sector')['Current Value'].sum().reset_index()
-            sector_df['%'] = sector_df['Current Value'] / df['Current Value'].sum() * 100
-            sector_df.loc[len(sector_df)] = ['Cash', cash, (cash/total_value*100)]
-            st.plotly_chart(px.bar(sector_df, x='%', y='Sector', orientation='h', text='%'), use_container_width=True)
+            sector_df['Percentage'] = (sector_df['Current Value'] / df['Current Value'].sum() * 100) if not df.empty else 0
+            sector_df.loc[len(sector_df)] = ['Cash', cash, (cash / total_value * 100)]
+            sector_df = sector_df.sort_values('Percentage', ascending=False)
+            
+            fig_sector = px.bar(
+                sector_df, 
+                x='Percentage', 
+                y='Sector', 
+                orientation='h',
+                title="Sector Allocation (%)",
+                text='Percentage',
+                color='Percentage',
+                color_continuous_scale='Blues'
+            )
+            fig_sector.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
+            fig_sector.update_layout(xaxis_title="Percentage of Total Portfolio")
+            st.plotly_chart(fig_sector, use_container_width=True)
 
     # Pending Orders
     pending = load_pending_orders(selected)
@@ -378,7 +405,7 @@ with tab2:
         for _, row in pending.iterrows():
             col1, col2, col3 = st.columns([5, 2, 1])
             with col1:
-                st.write(f"**{row['ticker']}** — {row['order_type']} {row['shares']} @ ${row['limit_price']:.2f}")
+                st.write(f"**{row['ticker']}** — {row['order_type']} {row['shares']:.2f} shares @ **${row['limit_price']:.2f}**")
             with col3:
                 if st.button("🗑️", key=f"del_po_{row['id']}"):
                     delete_pending_order(row['id'])
