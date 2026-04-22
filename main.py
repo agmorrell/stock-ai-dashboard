@@ -5,6 +5,7 @@ import streamlit as st
 import pandas as pd
 from yfinance import Ticker
 import plotly.express as px
+import plotly.graph_objects as go
 import requests
 import os
 import time
@@ -91,8 +92,8 @@ def clear_all_pending_orders():
     conn.commit()
     conn.close()
 
-# ----------------- PORTFOLIO CALCULATION (with accurate Sector) -----------------
-@st.cache_data(ttl=300)
+# ----------------- PORTFOLIO CALCULATION with 1D Change -----------------
+@st.cache_data(ttl=180)
 def calculate_portfolio():
     df = load_holdings()
     if df.empty:
@@ -102,14 +103,12 @@ def calculate_portfolio():
     for _, row in df.iterrows():
         ticker_symbol = row['ticker']
         try:
-            time.sleep(random.uniform(0.6, 1.2))
+            time.sleep(random.uniform(0.5, 1.0))
             ticker = Ticker(ticker_symbol)
             info = ticker.info
             current_price = float(info.get('currentPrice') or info.get('regularMarketPrice') or info.get('previousClose') or 0.0)
-            sector = info.get('sector') or info.get('industry') or "Other"
-            
-            # Today's % change
-            day_change = info.get('regularMarketChangePercent') or 0.0
+            sector = info.get('sector') or "Other"
+            today_change_pct = float(info.get('regularMarketChangePercent') or 0.0)
             
             current_value = row['shares'] * current_price
             cost = row['shares'] * row['cost_basis']
@@ -125,7 +124,7 @@ def calculate_portfolio():
                 'Unrealized Gain $': round(gain_dollar, 2),
                 'Unrealized Gain %': round(gain_pct, 2),
                 'Sector': sector,
-                'Today % Change': round(day_change, 2)
+                'Today % Change': round(today_change_pct, 2)
             })
         except Exception:
             data.append({
@@ -165,7 +164,7 @@ def call_grok(prompt, conversation_history=None):
     except Exception as e:
         return f"❌ Request Error: {str(e)}"
 
-# ----------------- FULL ANALYSIS (High Risk + Momentum Focus) -----------------
+# ----------------- FULL ANALYSIS -----------------
 def run_full_analysis():
     today = datetime.now().strftime("%B %d, %Y")
     portfolio_df = calculate_portfolio()
@@ -269,7 +268,7 @@ with tab1:
 with tab2:
     st.header("Portfolio Tracker")
     
-    # Cash Balance
+    # Cash Balance, Add Holding, Add Pending Order, Clear buttons (kept the same as before)
     st.subheader("💰 Cash Balance")
     current_cash = get_cash_balance()
     new_cash = st.number_input("Update Cash Available ($)", min_value=0.0, value=current_cash, step=100.0)
@@ -280,7 +279,6 @@ with tab2:
 
     st.divider()
 
-    # Add Holding
     with st.expander("➕ Add or Update Holding"):
         col1, col2, col3 = st.columns(3)
         with col1:
@@ -296,7 +294,6 @@ with tab2:
                 st.success(f"✅ {ticker} saved!")
                 st.rerun()
 
-    # Add Pending Order
     with st.expander("📋 Add Pending Order"):
         col1, col2 = st.columns(2)
         with col1:
@@ -311,7 +308,6 @@ with tab2:
                 st.success(f"✅ Pending {po_type} for {po_ticker} added!")
                 st.rerun()
 
-    # Clear All Buttons
     col_clear1, col_clear2 = st.columns(2)
     with col_clear1:
         if st.button("🗑️ Clear All Holdings"):
@@ -327,7 +323,7 @@ with tab2:
                 st.success("All pending orders cleared!")
                 st.rerun()
 
-    # Performance Metrics
+    # Performance Metrics (kept the same)
     portfolio_df = calculate_portfolio()
     cash = get_cash_balance()
     
@@ -362,9 +358,9 @@ with tab2:
 
     st.divider()
 
-    # Display Holdings with Daily Change
+    # Display Holdings
     if not portfolio_df.empty:
-        st.subheader("Current Holdings + Daily Performance")
+        st.subheader("Current Holdings")
         styled_df = portfolio_df.style.format({
             "Cost Basis": "${:.2f}",
             "Current Price": lambda x: f"${x:.2f}" if isinstance(x, (int, float)) else str(x),
@@ -372,48 +368,55 @@ with tab2:
             "Unrealized Gain $": lambda x: f"${x:.2f}" if isinstance(x, (int, float)) else str(x),
             "Unrealized Gain %": lambda x: f"{x:.2f}%" if isinstance(x, (int, float)) else str(x),
             "Today % Change": lambda x: f"{x:.2f}%" if isinstance(x, (int, float)) else str(x)
-        }).apply(lambda x: ['color: green' if isinstance(v, (int, float)) and v > 0 else 'color: red' if isinstance(v, (int, float)) and v < 0 else '' for v in x], subset=['Today % Change'])
+        }).apply(lambda x: ['color: #00cc00' if isinstance(v, (int, float)) and v > 0 else 'color: #ff4444' if isinstance(v, (int, float)) and v < 0 else '' for v in x], subset=['Today % Change'])
         
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
+    # ================== INTRADAY CHARTS FOR EACH STOCK ==================
+    if not portfolio_df.empty:
         st.divider()
-        col_chart1, col_chart2 = st.columns(2)
-        
-        with col_chart1:
-            st.subheader("Portfolio Allocation")
-            numeric_value = pd.to_numeric(portfolio_df["Current Value"], errors='coerce').fillna(0)
-            total_holdings_value = numeric_value.sum()
-            cash = get_cash_balance()
-            
-            if total_holdings_value + cash > 0:
-                alloc_data = portfolio_df[['Ticker', 'Current Value']].copy()
-                alloc_data = alloc_data[pd.to_numeric(alloc_data['Current Value'], errors='coerce').notna()]
-                alloc_data.loc[len(alloc_data)] = ['Cash', cash]
-                
-                fig_pie = px.pie(alloc_data, values='Current Value', names='Ticker', 
-                                title="Portfolio Allocation (Including Cash)", hole=0.45)
-                fig_pie.update_traces(textinfo='percent+label')
-                st.plotly_chart(fig_pie, use_container_width=True)
-        
-        with col_chart2:
-            st.subheader("Gains / Losses")
-            fig_bar = px.bar(portfolio_df, x='Ticker', y='Unrealized Gain $', 
-                            title="Unrealized Profit/Loss by Position",
-                            color='Unrealized Gain %',
-                            color_continuous_scale='RdYlGn')
-            st.plotly_chart(fig_bar, use_container_width=True)
+        st.subheader("📈 Intraday Charts (1D) - Individual Stocks")
+        st.caption("Real-time price movement today (refreshes every few minutes)")
 
-    # Sector Allocation Chart (now matches daily analysis sectors)
+        # Create a grid of small intraday charts
+        cols = st.columns(3)  # 3 charts per row on wide screens
+        for i, row in portfolio_df.iterrows():
+            ticker_symbol = row['Ticker']
+            with cols[i % 3]:
+                try:
+                    t = Ticker(ticker_symbol)
+                    # Fetch today's intraday data (1m or 5m interval)
+                    hist = t.history(period="1d", interval="5m")
+                    
+                    if not hist.empty:
+                        fig = go.Figure()
+                        fig.add_trace(go.Scatter(
+                            x=hist.index,
+                            y=hist['Close'],
+                            mode='lines',
+                            name=ticker_symbol,
+                            line=dict(color='#1f77b4')
+                        ))
+                        fig.update_layout(
+                            title=f"{ticker_symbol} Today",
+                            xaxis_title="Time",
+                            yaxis_title="Price",
+                            height=280,
+                            margin=dict(l=40, r=40, t=50, b=40),
+                            template="plotly_white"
+                        )
+                        st.plotly_chart(fig, use_container_width=True, key=f"chart_{ticker_symbol}")
+                    else:
+                        st.info(f"No intraday data for {ticker_symbol} yet.")
+                except Exception:
+                    st.info(f"Could not load chart for {ticker_symbol}")
+
+    # Sector Allocation
     if not portfolio_df.empty:
         st.subheader("Sector Allocation (%)")
-        
         sector_df = portfolio_df.groupby('Sector')['Current Value'].sum().reset_index()
         sector_df['Percentage'] = (sector_df['Current Value'] / total_holdings_value * 100) if total_holdings_value > 0 else 0
-        
-        # Add Cash
         sector_df.loc[len(sector_df)] = ['Cash', cash, (cash / total_portfolio_value * 100) if total_portfolio_value > 0 else 0]
-        
-        # Sort by percentage descending
         sector_df = sector_df.sort_values('Percentage', ascending=False)
         
         fig_sector = px.bar(
@@ -421,16 +424,16 @@ with tab2:
             x='Percentage', 
             y='Sector', 
             orientation='h',
-            title="Allocation by Sector (%) - Matching Daily Analysis",
+            title="Allocation by Sector (%)",
             text='Percentage',
             color='Percentage',
             color_continuous_scale='Blues'
         )
         fig_sector.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-        fig_sector.update_layout(xaxis_title="Percentage of Total Portfolio (%)", yaxis_title="")
+        fig_sector.update_layout(xaxis_title="Percentage of Total Portfolio (%)")
         st.plotly_chart(fig_sector, use_container_width=True)
 
-    # Pending Orders
+    # Pending Orders (unchanged)
     pending_df = load_pending_orders()
     if not pending_df.empty:
         st.subheader("📋 Pending Orders")
