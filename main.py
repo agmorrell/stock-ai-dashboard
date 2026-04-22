@@ -17,7 +17,7 @@ st.set_page_config(page_title="AI Stock Dashboard", layout="wide")
 st.title("🚀 My Personal AI Stock Dashboard")
 st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M %p EST')}")
 
-# ----------------- CSS for metrics -----------------
+# CSS for metrics
 st.markdown("""
     <style>
     div[data-testid="stMetricValue"] { font-size: 1.45em !important; font-weight: 600 !important; }
@@ -354,9 +354,9 @@ with tab2:
 
     st.divider()
 
-    # Current Holdings + Daily Performance
+    # Current Holdings
     if not portfolio_df.empty:
-        st.subheader("Current Holdings + Daily Performance")
+        st.subheader("Current Holdings")
         styled_df = portfolio_df.style.format({
             "Cost Basis": "${:.2f}",
             "Current Price": lambda x: f"${x:.2f}" if isinstance(x, (int, float)) else str(x),
@@ -370,8 +370,50 @@ with tab2:
 
         st.divider()
 
-        # Intraday Charts
+    # Portfolio Allocation Pie Chart
+    if not portfolio_df.empty:
+        st.subheader("Portfolio Allocation")
+        numeric_value = pd.to_numeric(portfolio_df["Current Value"], errors='coerce').fillna(0)
+        total_holdings_value = numeric_value.sum()
+        cash = get_cash_balance(selected_account)
+        
+        if total_holdings_value + cash > 0:
+            alloc_data = portfolio_df[['Ticker', 'Current Value']].copy()
+            alloc_data = alloc_data[pd.to_numeric(alloc_data['Current Value'], errors='coerce').notna()]
+            alloc_data.loc[len(alloc_data)] = ['Cash', cash]
+            
+            fig_pie = px.pie(alloc_data, values='Current Value', names='Ticker', 
+                            title="Portfolio Allocation (Including Cash)", hole=0.45)
+            fig_pie.update_traces(textinfo='percent+label')
+            st.plotly_chart(fig_pie, use_container_width=True)
+
+    # Sector Allocation Bar Chart
+    if not portfolio_df.empty:
+        st.subheader("Sector Allocation (%)")
+        sector_df = portfolio_df.groupby('Sector')['Current Value'].sum().reset_index()
+        sector_df['Percentage'] = (sector_df['Current Value'] / total_holdings_value * 100) if total_holdings_value > 0 else 0
+        sector_df.loc[len(sector_df)] = ['Cash', cash, (cash / total_portfolio_value * 100) if total_portfolio_value > 0 else 0]
+        sector_df = sector_df.sort_values('Percentage', ascending=False)
+        
+        fig_sector = px.bar(
+            sector_df, 
+            x='Percentage', 
+            y='Sector', 
+            orientation='h',
+            title="Allocation by Sector (%)",
+            text='Percentage',
+            color='Percentage',
+            color_continuous_scale='Blues'
+        )
+        fig_sector.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+        fig_sector.update_layout(xaxis_title="Percentage of Total Portfolio (%)")
+        st.plotly_chart(fig_sector, use_container_width=True)
+
+    # Intraday Charts
+    if not portfolio_df.empty:
         st.subheader("📈 Intraday Charts (1D) with Cost Basis")
+        st.caption("Today's price movement — solid red line = your cost basis per share")
+
         cols = st.columns(3)
         for i, row in portfolio_df.iterrows():
             ticker_symbol = row['Ticker']
@@ -389,9 +431,6 @@ with tab2:
                         st.plotly_chart(fig, use_container_width=True, key=f"chart_{i}")
                 except:
                     st.info(f"No chart for {ticker_symbol}")
-
-    else:
-        st.info("No holdings yet. Add some using the form above.")
 
     st.info(f"💰 Available Cash: ${get_cash_balance(selected_account):,.2f}")
 
