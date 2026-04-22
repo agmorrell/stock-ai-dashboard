@@ -367,41 +367,31 @@ with tab2:
 
     st.divider()
 
-    # Display Holdings with Individual Delete
+    # ================== COMPACT HOLDINGS WITH INDIVIDUAL DELETE & MINIMIZABLE ==================
     if not portfolio_df.empty:
         st.subheader("Current Holdings + Daily Performance")
         
         for idx, row in portfolio_df.iterrows():
-            with st.container(border=True):
-                col1, col2, col3, col4 = st.columns([3, 2, 2, 1])
+            with st.expander(f"📌 {row['Ticker']} — ${row['Current Value']:,.2f} ({row['Today % Change']:.2f}%)", expanded=False):
+                col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
                 with col1:
-                    st.write(f"**{row['Ticker']}**")
+                    st.write(f"**Shares:** {row['Shares']}")
+                    st.write(f"**Cost Basis:** ${row['Cost Basis']:.2f}")
                 with col2:
-                    st.write(f"Shares: {row['Shares']}")
+                    st.write(f"**Current Price:** ${row['Current Price']:.2f}")
+                    st.write(f"**Today % Change:** {row['Today % Change']:.2f}%")
                 with col3:
-                    st.write(f"Value: ${row['Current Value']:,.2f}")
+                    st.write(f"**Unrealized P/L:** ${row['Unrealized Gain $']:.2f} ({row['Unrealized Gain %']:.2f}%)")
                 with col4:
-                    if st.button("🗑️", key=f"del_hold_{row['Ticker']}", help="Delete this holding"):
+                    if st.button("🗑️ Delete", key=f"del_hold_{row['Ticker']}", help="Delete this holding"):
                         delete_holding(row['Ticker'])
                         st.cache_data.clear()
                         st.success(f"✅ Deleted {row['Ticker']}")
                         st.rerun()
-
-        # Also keep the full table for overview
-        styled_df = portfolio_df.style.format({
-            "Cost Basis": "${:.2f}",
-            "Current Price": lambda x: f"${x:.2f}" if isinstance(x, (int, float)) else str(x),
-            "Current Value": lambda x: f"${x:.2f}" if isinstance(x, (int, float)) else str(x),
-            "Unrealized Gain $": lambda x: f"${x:.2f}" if isinstance(x, (int, float)) else str(x),
-            "Unrealized Gain %": lambda x: f"{x:.2f}%" if isinstance(x, (int, float)) else str(x),
-            "Today % Change": lambda x: f"{x:.2f}%" if isinstance(x, (int, float)) else str(x)
-        }).apply(lambda x: ['color: #00cc00' if isinstance(v, (int, float)) and v > 0 else 'color: #ff4444' if isinstance(v, (int, float)) and v < 0 else '' for v in x], subset=['Today % Change'])
         
-        st.dataframe(styled_df, use_container_width=True, hide_index=True)
-
         st.divider()
 
-    # Intraday Charts with Cost Basis Line
+    # Intraday Charts
     if not portfolio_df.empty:
         st.subheader("📈 Intraday Charts (1D) with Cost Basis")
         st.caption("Today's price movement — solid red line = your cost basis per share")
@@ -418,7 +408,6 @@ with tab2:
                     
                     if not hist.empty:
                         fig = go.Figure()
-                        
                         fig.add_trace(go.Scatter(
                             x=hist.index,
                             y=hist['Close'],
@@ -426,7 +415,6 @@ with tab2:
                             name=ticker_symbol,
                             line=dict(color='#1f77b4', width=2)
                         ))
-                        
                         fig.add_hline(
                             y=cost_basis,
                             line_dash="solid",
@@ -437,13 +425,12 @@ with tab2:
                             annotation_font_size=11,
                             annotation_font_color="red"
                         )
-                        
                         fig.update_layout(
                             title=f"{ticker_symbol} Today",
                             xaxis_title="Time",
                             yaxis_title="Price ($)",
-                            height=300,
-                            margin=dict(l=40, r=40, t=60, b=40),
+                            height=280,
+                            margin=dict(l=40, r=40, t=50, b=40),
                             template="plotly_white"
                         )
                         st.plotly_chart(fig, use_container_width=True, key=f"chart_{ticker_symbol}_{i}")
