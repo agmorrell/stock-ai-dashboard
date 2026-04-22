@@ -17,11 +17,54 @@ st.set_page_config(page_title="AI Stock Dashboard", layout="wide")
 st.title("🚀 My Personal AI Stock Dashboard")
 st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M %p EST')}")
 
-# CSS
+# Improved CSS for consistent fonts across the entire app, especially Full Analysis
 st.markdown("""
     <style>
-    div[data-testid="stMetricValue"] { font-size: 1.45em !important; font-weight: 600 !important; }
-    div[data-testid="stMetricLabel"] { font-size: 0.85em !important; color: #666666; }
+    /* Overall font consistency */
+    .stMarkdown, .stMarkdown p, .stMarkdown li, .stMarkdown span {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        line-height: 1.65;
+        font-size: 1.02em;
+    }
+    
+    /* Headings in analysis */
+    .stMarkdown h1 { 
+        font-size: 1.8em; 
+        margin-top: 1.8em; 
+        margin-bottom: 0.6em;
+        color: #1f77b4;
+    }
+    .stMarkdown h2 { 
+        font-size: 1.5em; 
+        margin-top: 1.6em; 
+        margin-bottom: 0.5em;
+        color: #1f77b4;
+    }
+    .stMarkdown h3 { 
+        font-size: 1.3em; 
+        margin-top: 1.4em; 
+        margin-bottom: 0.4em;
+        color: #1f77b4;
+        border-left: 4px solid #1f77b4;
+        padding-left: 12px;
+    }
+    
+    /* Lists and paragraphs */
+    .stMarkdown ul, .stMarkdown ol {
+        padding-left: 1.8em;
+        margin-bottom: 1em;
+    }
+    .stMarkdown li {
+        margin-bottom: 0.4em;
+    }
+    
+    /* Make day trading setups stand out nicely */
+    .stMarkdown h3 + ul, .stMarkdown h3 + ol {
+        background-color: #f8f9fa;
+        padding: 1em;
+        border-radius: 8px;
+        border-left: 5px solid #1f77b4;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -368,7 +411,7 @@ with tab2:
         )
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
-    # **Intraday Charts with Cost Basis Red Line** - This is what you were missing
+    # Intraday Charts with Cost Basis
     if not df.empty:
         st.subheader("📈 Intraday Charts (1D) with Cost Basis")
         st.caption("Solid red line = your cost basis per share")
@@ -416,6 +459,7 @@ with tab2:
     if total_value > 0:
         st.subheader("Allocation Charts")
         c1, c2 = st.columns(2)
+        
         with c1:
             pie_data = df[['Ticker', 'Current Value']].copy()
             pie_data.loc[len(pie_data)] = ['Cash', cash]
