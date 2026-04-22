@@ -125,7 +125,7 @@ def delete_pending_order(order_id):
     conn.commit()
     conn.close()
 
-# ----------------- PORTFOLIO CALCULATION (with Today % Change) -----------------
+# ----------------- PORTFOLIO CALCULATION -----------------
 @st.cache_data(ttl=180)
 def calculate_portfolio(account_name):
     df = load_holdings(account_name)
@@ -339,7 +339,7 @@ with tab2:
     cash = get_cash_balance(selected)
     total_value = (df["Current Value"].sum() if not df.empty else 0) + cash
 
-    # Metrics with proper formatting
+    # Metrics
     st.subheader("📊 Performance Metrics")
     cols = st.columns(6)
     with cols[0]: st.metric("Total Value", f"${total_value:,.2f}")
@@ -351,33 +351,77 @@ with tab2:
 
     st.divider()
 
-    # Holdings Table with Today % Change and proper formatting
+    # Holdings Table
     if not df.empty:
         st.subheader("Current Holdings + Daily Performance")
-        display_df = df.style.format({
+        styled_df = df.style.format({
             "Cost Basis": "${:.2f}",
             "Current Price": "${:.2f}",
             "Current Value": "${:.2f}",
             "Unrealized Gain $": "${:.2f}",
             "Unrealized Gain %": "{:.2f}%",
             "Today % Change": "{:.2f}%"
-        }).apply(lambda x: ['color: #00cc00' if isinstance(v, (int, float)) and v > 0 else 
-                           'color: #ff4444' if isinstance(v, (int, float)) and v < 0 else '' for v in x], 
-                subset=['Today % Change'])
+        }).apply(
+            lambda x: ['color: #00cc00' if isinstance(v, (int, float)) and v > 0 else 
+                       'color: #ff4444' if isinstance(v, (int, float)) and v < 0 else '' for v in x], 
+            subset=['Today % Change']
+        )
+        st.dataframe(styled_df, use_container_width=True, hide_index=True)
+
+    # **Intraday Charts with Cost Basis Red Line** - This is what you were missing
+    if not df.empty:
+        st.subheader("📈 Intraday Charts (1D) with Cost Basis")
+        st.caption("Solid red line = your cost basis per share")
         
-        st.dataframe(display_df, use_container_width=True, hide_index=True)
+        cols = st.columns(3)
+        for i, row in df.iterrows():
+            ticker_symbol = row['Ticker']
+            cost_basis = row['Cost Basis']
+            with cols[i % 3]:
+                try:
+                    t = Ticker(ticker_symbol)
+                    hist = t.history(period="1d", interval="5m")
+                    if not hist.empty:
+                        fig = go.Figure()
+                        fig.add_trace(go.Scatter(
+                            x=hist.index, 
+                            y=hist['Close'], 
+                            mode='lines', 
+                            name=ticker_symbol,
+                            line=dict(color='#1f77b4', width=2)
+                        ))
+                        fig.add_hline(
+                            y=cost_basis, 
+                            line_dash="solid", 
+                            line_color="red", 
+                            line_width=2.5,
+                            annotation_text=f"Cost Basis (${cost_basis:.2f})",
+                            annotation_position="top right",
+                            annotation_font_color="red"
+                        )
+                        fig.update_layout(
+                            title=f"{ticker_symbol} Today",
+                            xaxis_title="Time",
+                            yaxis_title="Price ($)",
+                            height=300,
+                            template="plotly_white"
+                        )
+                        st.plotly_chart(fig, use_container_width=True, key=f"chart_{ticker_symbol}_{i}")
+                    else:
+                        st.info(f"No intraday data for {ticker_symbol} yet.")
+                except Exception:
+                    st.info(f"Could not load chart for {ticker_symbol}")
 
     # Allocation Charts
     if total_value > 0:
         st.subheader("Allocation Charts")
         c1, c2 = st.columns(2)
-        
         with c1:
             pie_data = df[['Ticker', 'Current Value']].copy()
             pie_data.loc[len(pie_data)] = ['Cash', cash]
             fig_pie = px.pie(pie_data, values='Current Value', names='Ticker', 
                             title="Portfolio Allocation (Including Cash)", hole=0.45)
-            fig_pie.update_traces(textinfo='percent+label', textfont_size=12)
+            fig_pie.update_traces(textinfo='percent+label')
             st.plotly_chart(fig_pie, use_container_width=True)
 
         with c2:
