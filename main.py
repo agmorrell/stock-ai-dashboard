@@ -17,6 +17,14 @@ st.set_page_config(page_title="AI Stock Dashboard", layout="wide")
 st.title("🚀 My Personal AI Stock Dashboard")
 st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M %p EST')}")
 
+# ----------------- CSS for metrics -----------------
+st.markdown("""
+    <style>
+    div[data-testid="stMetricValue"] { font-size: 1.45em !important; font-weight: 600 !important; }
+    div[data-testid="stMetricLabel"] { font-size: 0.85em !important; color: #666666; }
+    </style>
+""", unsafe_allow_html=True)
+
 # ----------------- DATABASE -----------------
 def get_db_connection():
     conn = sqlite3.connect('portfolio.db')
@@ -26,30 +34,10 @@ def get_db_connection():
 def init_db():
     conn = get_db_connection()
     conn.executescript('''
-        CREATE TABLE IF NOT EXISTS accounts (
-            account_name TEXT PRIMARY KEY,
-            risk_tolerance TEXT DEFAULT 'Moderate'
-        );
-        CREATE TABLE IF NOT EXISTS holdings (
-            account_name TEXT, 
-            ticker TEXT, 
-            shares REAL, 
-            cost_basis REAL,
-            PRIMARY KEY (account_name, ticker)
-        );
-        CREATE TABLE IF NOT EXISTS cash_balance (
-            account_name TEXT PRIMARY KEY, 
-            cash REAL DEFAULT 0
-        );
-        CREATE TABLE IF NOT EXISTS pending_orders (
-            id INTEGER PRIMARY KEY, 
-            account_name TEXT,
-            ticker TEXT, 
-            order_type TEXT, 
-            shares REAL, 
-            limit_price REAL, 
-            status TEXT DEFAULT 'Pending'
-        );
+        CREATE TABLE IF NOT EXISTS accounts (account_name TEXT PRIMARY KEY, risk_tolerance TEXT DEFAULT 'Moderate');
+        CREATE TABLE IF NOT EXISTS holdings (account_name TEXT, ticker TEXT, shares REAL, cost_basis REAL, PRIMARY KEY (account_name, ticker));
+        CREATE TABLE IF NOT EXISTS cash_balance (account_name TEXT PRIMARY KEY, cash REAL DEFAULT 0);
+        CREATE TABLE IF NOT EXISTS pending_orders (id INTEGER PRIMARY KEY, account_name TEXT, ticker TEXT, order_type TEXT, shares REAL, limit_price REAL, status TEXT DEFAULT 'Pending');
     ''')
     conn.execute("INSERT OR IGNORE INTO accounts (account_name, risk_tolerance) VALUES ('Main Portfolio', 'Moderate')")
     conn.commit()
@@ -65,8 +53,7 @@ def get_accounts():
 
 def add_account(account_name, risk_tolerance="Moderate"):
     conn = get_db_connection()
-    conn.execute("INSERT OR IGNORE INTO accounts (account_name, risk_tolerance) VALUES (?, ?)", 
-                 (account_name, risk_tolerance))
+    conn.execute("INSERT OR IGNORE INTO accounts (account_name, risk_tolerance) VALUES (?, ?)", (account_name, risk_tolerance))
     conn.commit()
     conn.close()
 
@@ -78,8 +65,7 @@ def get_risk_tolerance(account_name):
 
 def set_risk_tolerance(account_name, risk_tolerance):
     conn = get_db_connection()
-    conn.execute("UPDATE accounts SET risk_tolerance = ? WHERE account_name = ?", 
-                 (risk_tolerance, account_name))
+    conn.execute("UPDATE accounts SET risk_tolerance = ? WHERE account_name = ?", (risk_tolerance, account_name))
     conn.commit()
     conn.close()
 
@@ -91,16 +77,14 @@ def load_holdings(account_name):
 
 def save_holding(account_name, ticker, shares, cost_basis):
     conn = get_db_connection()
-    conn.execute("""INSERT OR REPLACE INTO holdings 
-                    (account_name, ticker, shares, cost_basis) VALUES (?, ?, ?, ?)""",
+    conn.execute("INSERT OR REPLACE INTO holdings (account_name, ticker, shares, cost_basis) VALUES (?, ?, ?, ?)",
                  (account_name, ticker.upper(), shares, cost_basis))
     conn.commit()
     conn.close()
 
 def delete_holding(account_name, ticker):
     conn = get_db_connection()
-    conn.execute("DELETE FROM holdings WHERE account_name = ? AND ticker = ?", 
-                 (account_name, ticker.upper()))
+    conn.execute("DELETE FROM holdings WHERE account_name = ? AND ticker = ?", (account_name, ticker.upper()))
     conn.commit()
     conn.close()
 
@@ -118,16 +102,14 @@ def get_cash_balance(account_name):
 
 def update_cash_balance(account_name, new_cash):
     conn = get_db_connection()
-    conn.execute("REPLACE INTO cash_balance (account_name, cash) VALUES (?, ?)", 
-                 (account_name, new_cash))
+    conn.execute("REPLACE INTO cash_balance (account_name, cash) VALUES (?, ?)", (account_name, new_cash))
     conn.commit()
     conn.close()
 
 def add_pending_order(account_name, ticker, order_type, shares, limit_price):
     conn = get_db_connection()
     conn.execute("""INSERT INTO pending_orders (account_name, ticker, order_type, shares, limit_price) 
-                    VALUES (?, ?, ?, ?, ?)""", 
-                 (account_name, ticker.upper(), order_type, shares, limit_price))
+                    VALUES (?, ?, ?, ?, ?)""", (account_name, ticker.upper(), order_type, shares, limit_price))
     conn.commit()
     conn.close()
 
@@ -241,17 +223,7 @@ Holdings:
 Pending Orders:
 {pending_text}
 
-**Part 1: Market Overview**
-1. Identify the stock sectors with the **highest short-term momentum** right now and explain why they are leading.
-2. Build a high-probability watchlist...
-3. Create 5 actionable day trading setups...
-4. Suggest a capital management strategy suitable for {risk_tolerance.lower()} risk tolerance.
-5. List upcoming earnings, macro events...
-
-**Part 2: Personalized Recommendations**
-Focus heavily on opportunities in the **highest short-term momentum sectors**.
-
-Be detailed and actionable. Use clear headings and bullet points."""
+Focus on highest short-term momentum sectors and provide aggressive but reasoned recommendations."""
 
     with st.spinner(f"Generating analysis for {selected_account}..."):
         result = call_grok(prompt)
@@ -272,6 +244,12 @@ with st.sidebar:
         st.cache_data.clear()
         st.success("Prices refreshed!")
 
+# ----------------- ACCOUNT MANAGEMENT -----------------
+if "current_account" not in st.session_state:
+    st.session_state.current_account = "Main Portfolio"
+
+accounts = get_accounts()
+
 # ----------------- TABS -----------------
 tab1, tab2 = st.tabs(["📈 Full Analysis", "💼 My Portfolio"])
 
@@ -280,41 +258,33 @@ with tab1:
     if "full_analysis" in st.session_state:
         st.markdown(st.session_state.full_analysis)
     else:
-        st.info("Select an account and click 'Run Full Daily Analysis' in the sidebar.")
+        st.info("Select an account and click 'Run Full Daily Analysis'.")
 
 with tab2:
     st.header("Portfolio Tracker")
     
     # Account Selector + New Account
     st.subheader("Portfolio Account")
-    accounts = get_accounts()
-    
     col1, col2 = st.columns([3, 2])
     with col1:
-        selected_account = st.selectbox(
-            "Select Account", 
-            accounts, 
-            index=accounts.index(st.session_state.get("current_account", "Main Portfolio")) 
-                  if st.session_state.get("current_account") in accounts else 0,
-            key="account_selector"
-        )
+        selected_account = st.selectbox("Select Account", accounts, 
+                                      index=accounts.index(st.session_state.current_account) 
+                                            if st.session_state.current_account in accounts else 0,
+                                      key="account_selector")
         st.session_state.current_account = selected_account
 
     with col2:
-        new_account_name = st.text_input("New Account Name", placeholder="e.g. IRA Account", key="new_account_input")
-        if st.button("Create New Account", key="create_account_btn"):
-            if new_account_name.strip():
-                add_account(new_account_name.strip())
-                st.success(f"✅ Account '{new_account_name}' created!")
+        new_name = st.text_input("New Account Name", placeholder="e.g. IRA", key="new_account_name")
+        if st.button("Create New Account"):
+            if new_name.strip():
+                add_account(new_name.strip())
+                st.success(f"Account '{new_name}' created!")
                 st.rerun()
-            else:
-                st.warning("Please enter an account name.")
 
     # Risk Tolerance
     current_risk = get_risk_tolerance(selected_account)
     new_risk = st.selectbox("Risk Tolerance", ["Conservative", "Moderate", "Aggressive"], 
-                           index=["Conservative", "Moderate", "Aggressive"].index(current_risk),
-                           key="risk_selector")
+                           index=["Conservative", "Moderate", "Aggressive"].index(current_risk))
     if new_risk != current_risk:
         set_risk_tolerance(selected_account, new_risk)
         st.success(f"Risk tolerance updated to {new_risk}")
@@ -346,10 +316,10 @@ with tab2:
             if ticker:
                 save_holding(selected_account, ticker, shares, cost)
                 st.cache_data.clear()
-                st.success(f"✅ {ticker} saved to {selected_account}!")
+                st.success(f"✅ {ticker} saved!")
                 st.rerun()
 
-    # Performance Metrics for current account
+    # Performance Metrics
     portfolio_df = calculate_portfolio(selected_account)
     cash = get_cash_balance(selected_account)
     
@@ -382,6 +352,47 @@ with tab2:
     with col6:
         st.metric("Cash Allocation", f"{cash_pct:.1f}%")
 
-    st.info(f"Current Account: **{selected_account}** | Risk Tolerance: **{get_risk_tolerance(selected_account)}**")
+    st.divider()
+
+    # Current Holdings + Daily Performance
+    if not portfolio_df.empty:
+        st.subheader("Current Holdings + Daily Performance")
+        styled_df = portfolio_df.style.format({
+            "Cost Basis": "${:.2f}",
+            "Current Price": lambda x: f"${x:.2f}" if isinstance(x, (int, float)) else str(x),
+            "Current Value": lambda x: f"${x:.2f}" if isinstance(x, (int, float)) else str(x),
+            "Unrealized Gain $": lambda x: f"${x:.2f}" if isinstance(x, (int, float)) else str(x),
+            "Unrealized Gain %": lambda x: f"{x:.2f}%" if isinstance(x, (int, float)) else str(x),
+            "Today % Change": lambda x: f"{x:.2f}%" if isinstance(x, (int, float)) else str(x)
+        }).apply(lambda x: ['color: #00cc00' if isinstance(v, (int, float)) and v > 0 else 'color: #ff4444' if isinstance(v, (int, float)) and v < 0 else '' for v in x], subset=['Today % Change'])
+        
+        st.dataframe(styled_df, use_container_width=True, hide_index=True)
+
+        st.divider()
+
+        # Intraday Charts
+        st.subheader("📈 Intraday Charts (1D) with Cost Basis")
+        cols = st.columns(3)
+        for i, row in portfolio_df.iterrows():
+            ticker_symbol = row['Ticker']
+            cost_basis = row['Cost Basis']
+            with cols[i % 3]:
+                try:
+                    t = Ticker(ticker_symbol)
+                    hist = t.history(period="1d", interval="5m")
+                    if not hist.empty:
+                        fig = go.Figure()
+                        fig.add_trace(go.Scatter(x=hist.index, y=hist['Close'], mode='lines', line=dict(color='#1f77b4')))
+                        fig.add_hline(y=cost_basis, line_dash="solid", line_color="red", line_width=2.5,
+                                      annotation_text=f"Cost Basis (${cost_basis:.2f})", annotation_position="top right")
+                        fig.update_layout(title=f"{ticker_symbol} Today", height=280)
+                        st.plotly_chart(fig, use_container_width=True, key=f"chart_{i}")
+                except:
+                    st.info(f"No chart for {ticker_symbol}")
+
+    else:
+        st.info("No holdings yet. Add some using the form above.")
+
+    st.info(f"💰 Available Cash: ${get_cash_balance(selected_account):,.2f}")
 
 st.caption("Built with Streamlit + yfinance + Grok API • Educational use only")
