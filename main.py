@@ -396,7 +396,7 @@ with tab2:
   
     st.divider()
   
-        # Holdings Table with colored Today % Change - FIXED
+    # Holdings Table with colored Today % Change - FIXED
     if not portfolio_df.empty:
         st.subheader("Current Holdings + Daily Performance")
         
@@ -427,8 +427,7 @@ with tab2:
         
         styled_df = styled_df.applymap(color_today_change, subset=['Today % Change'])
         
-        st.dataframe(styled_df, use_container_width=True, hide_index=True)
-  
+        st.dataframe(styled_df, use_container_width=True, hide_index=True)  
     # Pending Orders
     pending = load_pending_orders(selected_account)
     if not pending.empty:
