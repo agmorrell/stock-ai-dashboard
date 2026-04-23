@@ -10,6 +10,42 @@ import requests
 import os
 import time
 import random
+# ================== STRONGER TRADING TEXT CLEANER ==================
+def clean_analysis_text(text):
+    if not text:
+        return text
+    
+    # 1. Basic punctuation spacing
+    text = re.sub(r'([a-zA-Z0-9)])([.,;:/])([a-zA-Z])', r'\1\2 \3', text)
+    
+    # 2. Number/letter spacing
+    text = re.sub(r'([a-zA-Z)])([0-9])', r'\1 \2', text)
+    text = re.sub(r'([0-9])([a-zA-Z(])', r'\1 \2', text)
+    
+    # 3. Trading keywords spacing
+    text = re.sub(r'(\w+)(Long|Short|Entry|Stop|Target|StopLoss|Catalyst|Momentum)', r'\1 \2', text, flags=re.IGNORECASE)
+    text = re.sub(r'(Entry|Stop|Target)([0-9])', r'\1 \2', text, flags=re.IGNORECASE)
+    text = re.sub(r'([0-9])(Entry|Stop|Target)', r'\1 \2', text, flags=re.IGNORECASE)
+    
+    # 4. Dash / range fixes
+    text = re.sub(r'([0-9.])(−|-)([0-9.])', r'\1 - \3', text)
+    text = re.sub(r'([0-9.])([/\\])([0-9.])', r'\1 / \3', text)
+    
+    # 5. Parentheses and price targets
+    text = re.sub(r'\)([A-Za-z0-9])', r') \1', text)
+    text = re.sub(r'([A-Za-z0-9])\(', r'\1 (', text)
+    text = re.sub(r'([0-9,]+)\)([A-Za-z])', r'\1) \2', text)
+    
+    # 6. Common run-together patterns from your examples
+    text = re.sub(r'(pre|post|earnings|gap|high|retest|surge|flow|coattails|hype|vol|squeeze)', r' \1', text, flags=re.IGNORECASE)
+    text = re.sub(r'([0-9.])([A-Za-z])', r'\1 \2', text)
+    text = re.sub(r'([A-Za-z])([0-9.])', r'\1 \2', text)
+    
+    # 7. Final aggressive cleanup
+    text = re.sub(r'([a-z0-9)])([A-Z])', r'\1 \2', text)
+    text = re.sub(r'(\w{8,})([A-Z])', r'\1 \2', text)
+    
+    return text
 import sqlite3
 import re
 from datetime import datetime
