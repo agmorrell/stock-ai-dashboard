@@ -18,14 +18,14 @@ st.set_page_config(page_title="AI Stock Dashboard", layout="wide")
 st.title("🚀 My Personal AI Stock Dashboard")
 st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M %p EST')}")
 
-# Clean CSS
+# Clean CSS with good readability
 st.markdown("""
     <style>
     .stMarkdown, .stMarkdown p, .stMarkdown li {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         font-size: 1.05em;
         line-height: 1.75;
-        margin-bottom: 0.9em;
+        margin-bottom: 0.85em;
     }
     .stMarkdown p, .stMarkdown li {
         white-space: pre-wrap;
@@ -58,44 +58,39 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# **Very aggressive text cleaner** for Grok's dense output
+# Very aggressive cleaner for trading setups
 def clean_analysis_text(text):
     if not text:
         return text
     
-    # 1. Basic punctuation spacing
+    # 1. Basic spacing
     text = re.sub(r'([a-zA-Z0-9)])([.,;:/])([a-zA-Z])', r'\1\2 \3', text)
-    
-    # 2. Number/letter spacing
     text = re.sub(r'([a-zA-Z)])([0-9])', r'\1 \2', text)
     text = re.sub(r'([0-9])([a-zA-Z(])', r'\1 \2', text)
     
-    # 3. Common trading word run-ons
-    text = re.sub(r'(\w+)(hold|add|buy|sell|trim|deploy|momentum|squeeze|play|catalyst|explorer|positions|drypowder|into|new)', r'\1 \2', text, flags=re.IGNORECASE)
+    # 2. Trading-specific fixes
+    text = re.sub(r'(\w+)(Long|Short|Entry|Stop|Target|StopLoss|Catalyst)', r'\1 \2', text, flags=re.IGNORECASE)
+    text = re.sub(r'(Entry|Stop|Target)([0-9])', r'\1 \2', text, flags=re.IGNORECASE)
+    text = re.sub(r'([0-9])(Entry|Stop|Target)', r'\1 \2', text, flags=re.IGNORECASE)
     
-    # 4. Cash/holdings related
-    text = re.sub(r'(cash|holdings|positions|shares)([0-9])', r'\1 \2', text, flags=re.IGNORECASE)
-    text = re.sub(r'([0-9])(K|k)', r'\1 \2', text)
-    
-    # 5. Slashes, dashes, parentheses
-    text = re.sub(r'([a-zA-Z0-9)])([/\-])([a-zA-Z0-9(])', r'\1 \2 \3', text)
+    # 3. Fix dashes, slashes, parentheses
+    text = re.sub(r'([0-9a-zA-Z)])([/\-−])([0-9a-zA-Z(])', r'\1 \2 \3', text)
     text = re.sub(r'\)([a-zA-Z0-9])', r') \1', text)
     text = re.sub(r'([a-zA-Z0-9])\(', r'\1 (', text)
     
-    # 6. Specific patterns you reported
+    # 4. Fix common run-ons you reported
+    text = re.sub(r'([0-9,]+)\)([a-zA-Z])', r'\1) \2', text)
     text = re.sub(r'([A-Za-z]{3})\.([A-Za-z])', r'\1. \2', text)
     text = re.sub(r'([0-9])−([0-9])', r'\1 - \2', text)
     text = re.sub(r'([a-z0-9]),([A-Z])', r'\1, \2', text)
     
-    # 7. Final aggressive pass - force space before capital letters after lowercase or number
+    # 5. Final aggressive pass
     text = re.sub(r'([a-z0-9)])([A-Z])', r'\1 \2', text)
-    
-    # 8. Extra cleanup for repeated patterns
-    text = re.sub(r'(\w{10,})([A-Z])', r'\1 \2', text)  # Long words followed by capital
+    text = re.sub(r'(\w{10,})([A-Z])', r'\1 \2', text)
     
     return text
 
-# ----------------- DATABASE -----------------
+# ----------------- DATABASE (unchanged) -----------------
 def get_db_connection():
     conn = sqlite3.connect('portfolio.db')
     conn.row_factory = sqlite3.Row
@@ -296,95 +291,7 @@ Be detailed, specific, and actionable. Use headings and bullets."""
         ]
         return cleaned_result
 
-def clean_analysis_text(text):
-    if not text:
-        return text
-    
-    # Extremely aggressive cleaning for your specific issues
-    text = re.sub(r'([a-zA-Z0-9)])([.,;:/])([a-zA-Z])', r'\1\2 \3', text)
-    text = re.sub(r'([a-zA-Z)])([0-9])', r'\1 \2', text)
-    text = re.sub(r'([0-9])([a-zA-Z(])', r'\1 \2', text)
-    text = re.sub(r'(\w+)(hold|add|buy|sell|trim|deploy|momentum|squeeze|play|catalyst|explorer|positions|drypowder|into|new)', r'\1 \2', text, flags=re.IGNORECASE)
-    text = re.sub(r'(cash|holdings|positions|shares)([0-9])', r'\1 \2', text, flags=re.IGNORECASE)
-    text = re.sub(r'([0-9])(K|k)', r'\1 \2', text)
-    text = re.sub(r'([a-zA-Z0-9)])([/\-])([a-zA-Z0-9(])', r'\1 \2 \3', text)
-    text = re.sub(r'\)([a-zA-Z0-9])', r') \1', text)
-    text = re.sub(r'([a-zA-Z0-9])\(', r'\1 (', text)
-    text = re.sub(r'([A-Za-z]{3})\.([A-Za-z])', r'\1. \2', text)
-    text = re.sub(r'([0-9])−([0-9])', r'\1 - \2', text)
-    text = re.sub(r'([a-z0-9]),([A-Z])', r'\1, \2', text)
-    text = re.sub(r'([a-z0-9)])([A-Z])', r'\1 \2', text)
-    
-    # Extra aggressive pass for very long run-on strings
-    text = re.sub(r'(\w{8,})([A-Z])', r'\1 \2', text)
-    text = re.sub(r'([0-9,]+)\)([a-zA-Z])', r'\1) \2', text)
-    
-    return text
-
-# ----------------- GROK API -----------------
-def call_grok(prompt, history=None):
-    api_key = os.environ.get("GROK_API_KEY")
-    if not api_key:
-        return "❌ Grok API key not found."
-    
-    messages = history or []
-    messages.append({"role": "user", "content": prompt})
-    
-    try:
-        response = requests.post(
-            "https://api.x.ai/v1/chat/completions",
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={"model": "grok-4-1-fast-reasoning", "messages": messages, "temperature": 0.7, "max_tokens": 7000},
-            timeout=120
-        )
-        if response.status_code != 200:
-            return f"❌ API Error {response.status_code}"
-        return response.json()['choices'][0]['message']['content']
-    except Exception as e:
-        return f"❌ Request Error: {str(e)}"
-
-# ----------------- FULL ANALYSIS -----------------
-def run_full_analysis(selected_account):
-    today = datetime.now().strftime("%B %d, %Y")
-    portfolio_df = calculate_portfolio(selected_account)
-    cash = get_cash_balance(selected_account)
-    risk = get_risk_tolerance(selected_account)
-    pending_df = load_pending_orders(selected_account)
-    
-    prompt = f"""You are a professional market analyst with **{risk.lower()} risk tolerance**. Date: {today}.
-
-Portfolio ({selected_account}):
-Cash: ${cash:,.2f}
-Holdings:\n{portfolio_df.to_string(index=False) if not portfolio_df.empty else "None"}
-Pending Orders:\n{pending_df.to_string(index=False) if not pending_df.empty else "None"}
-
-**Part 1: Market Overview**
-- Highest short-term momentum sectors + why
-- 10-stock watchlist with volatility/volume/catalysts
-- 5 day trading setups (entry, stop, target)
-- Capital management strategy
-- Upcoming catalysts this week
-
-**Part 2: Personalized Recommendations**
-For every holding and new ideas:
-- Clear **Buy/Sell/Hold/Trim/Add** with specific share amounts or % of cash
-- Entry/exit zones or triggers
-- Reasoning tied to momentum
-- Risk level and stop-loss ideas
-
-Be detailed, specific, and actionable. Use headings and bullets."""
-
-    with st.spinner("Generating full analysis..."):
-        raw_result = call_grok(prompt)
-        cleaned_result = clean_analysis_text(raw_result)
-        st.session_state.full_analysis = cleaned_result
-        st.session_state.conversation_history = [
-            {"role": "user", "content": prompt},
-            {"role": "assistant", "content": cleaned_result}
-        ]
-        return cleaned_result
-
-# ----------------- SIDEBAR -----------------
+# ----------------- SIDEBAR & TABS (unchanged except for cleaning) -----------------
 with st.sidebar:
     st.header("Controls")
     if st.button("🔥 Run Full Daily Analysis", type="primary"):
@@ -395,7 +302,6 @@ with st.sidebar:
         st.cache_data.clear()
         st.success("Prices refreshed!")
 
-# ----------------- TABS -----------------
 tab1, tab2 = st.tabs(["📈 Full Analysis", "💼 My Portfolio"])
 
 with tab1:
