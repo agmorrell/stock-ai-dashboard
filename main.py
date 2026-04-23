@@ -17,56 +17,53 @@ st.set_page_config(page_title="AI Stock Dashboard", layout="wide")
 st.title("🚀 My Personal AI Stock Dashboard")
 st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M %p EST')}")
 
-# Clean, balanced CSS for Full Analysis tab
+# Tuned CSS - tighter spacing for same-style content, better bullet flow
 st.markdown("""
     <style>
-    /* Base readability */
     .stMarkdown, .stMarkdown p, .stMarkdown li {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         font-size: 1.04em;
-        line-height: 1.72;
-        margin-bottom: 1.1em;
+        line-height: 1.68;
+        margin-bottom: 0.75em;
     }
     
-    /* Prevent words from running together */
+    /* Prevent run-together words */
     .stMarkdown p, .stMarkdown li {
         white-space: pre-wrap;
         word-break: break-word;
     }
     
-    /* Headings */
-    .stMarkdown h1 { font-size: 1.8em; margin: 2em 0 0.8em 0; color: #1f77b4; }
-    .stMarkdown h2 { font-size: 1.5em; margin: 1.8em 0 0.7em 0; color: #1f77b4; }
+    /* Headings get more breathing room */
+    .stMarkdown h1 { font-size: 1.85em; margin: 2.2em 0 0.9em 0; color: #1f77b4; }
+    .stMarkdown h2 { font-size: 1.55em; margin: 2em 0 0.8em 0; color: #1f77b4; }
     .stMarkdown h3 { 
-        font-size: 1.32em; 
-        margin: 1.7em 0 0.6em 0; 
+        font-size: 1.35em; 
+        margin: 1.8em 0 0.7em 0; 
         color: #1f77b4; 
         border-left: 5px solid #1f77b4; 
         padding-left: 12px; 
     }
     
-    /* Lists */
+    /* Tighter bullet lists - less space between bullets of same style */
     .stMarkdown ul, .stMarkdown ol {
         padding-left: 1.9em;
-        margin-bottom: 1.4em;
+        margin-bottom: 1.1em;
     }
     .stMarkdown li {
-        margin-bottom: 0.75em;
+        margin-bottom: 0.45em;   /* Reduced space between bullets */
     }
     
-    /* Visual block for dense sections (like recommendations) */
-    .stMarkdown h3 + ul, .stMarkdown h3 + ol, .stMarkdown h3 + p {
+    /* Visual block for recommendation sections */
+    .stMarkdown h3 + ul, .stMarkdown h3 + ol {
         background-color: #f8f9fa;
-        padding: 1.3em;
+        padding: 1.2em 1.5em;
         border-radius: 8px;
         border-left: 6px solid #1f77b4;
-        margin: 1.3em 0;
+        margin: 1.2em 0;
     }
     
     /* Fix italic/bold spacing */
     .stMarkdown em, .stMarkdown i, .stMarkdown strong, .stMarkdown b {
-        font-style: italic;
-        font-weight: 600;
         margin: 0 2px;
     }
     </style>
