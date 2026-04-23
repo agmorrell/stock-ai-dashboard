@@ -194,7 +194,7 @@ def call_grok(prompt, conversation_history=None):
     except Exception as e:
         return f"❌ Request Error: {str(e)}"
 
-# ----------------- FULL ANALYSIS WITH YOUR EXACT PROMPT + FRESH PRICES -----------------
+# ----------------- FULL ANALYSIS (with fresh prices) -----------------
 def run_full_analysis(selected_account):
     today = datetime.now().strftime("%B %d, %Y")
     portfolio_df = calculate_portfolio(selected_account)
@@ -202,12 +202,12 @@ def run_full_analysis(selected_account):
     risk_tolerance = get_risk_tolerance(selected_account)
     pending_df = load_pending_orders(selected_account)
   
-    # Fresh price snapshot to prevent hallucinations
+    # Fresh price snapshot to fight hallucinations
     price_snapshot = ""
     if not portfolio_df.empty:
-        price_snapshot = "\n**CURRENT REAL-TIME PRICES (USE THESE EXACT NUMBERS ONLY):**\n"
+        price_snapshot = "\n**CURRENT REAL-TIME PRICES (USE THESE EXACT NUMBERS ONLY - IGNORE OLD DATA):**\n"
         for _, row in portfolio_df.iterrows():
-            price_snapshot += f"- {row['Ticker']}: Current Price = ${row['Current Price']}\n"
+            price_snapshot += f"- {row['Ticker']}: ${row['Current Price']}\n"
 
     portfolio_text = portfolio_df.to_string(index=False) if not portfolio_df.empty else "No holdings yet."
     pending_text = pending_df.to_string(index=False) if not pending_df.empty else "No pending orders."
@@ -241,10 +241,22 @@ For each existing holding and new opportunities list as bullets:
 Be detailed, specific, and actionable. Use clear headings and bullet points. Base all price-related recommendations strictly on the CURRENT REAL-TIME PRICES provided above."""
 
     with st.spinner(f"Generating full analysis for {selected_account}..."):
-        main_analysis = call_grok(prompt)
+        result = call_grok(prompt)
+        st.session_state.full_analysis = result
+        if "conversation_history" not in st.session_state:
+            st.session_state.conversation_history = []
+        st.session_state.conversation_history = [
+            {"role": "user", "content": prompt},
+            {"role": "assistant", "content": result}
+        ]
+        return result
 
-        # Weekly Action Plan
-        weekly_prompt = f"""Based on the full analysis you just provided, create a clean and practical **Weekly Action Plan**.
+# ----------------- SEPARATE WEEKLY ACTION PLAN -----------------
+def run_weekly_plan(selected_account):
+    if "full_analysis" not in st.session_state:
+        return "Please run Full Daily Analysis first."
+
+    weekly_prompt = """Using the previous full analysis, create a clean and practical **Weekly Action Plan**.
 
 Use this exact structure:
 
@@ -267,32 +279,29 @@ Use this exact structure:
 
 Focus on high-priority moves, risk management, and following through on the recommendations."""
 
-        with st.spinner("Creating Weekly Action Plan..."):
-            weekly_plan = call_grok(weekly_prompt, [
-                {"role": "user", "content": prompt},
-                {"role": "assistant", "content": main_analysis}
-            ])
-
-        full_result = main_analysis + "\n\n---\n\n" + weekly_plan
-
-        st.session_state.full_analysis = full_result
-        if "conversation_history" not in st.session_state:
-            st.session_state.conversation_history = []
-        st.session_state.conversation_history = [
-            {"role": "user", "content": prompt},
-            {"role": "assistant", "content": full_result}
-        ]
-        return full_result
+    with st.spinner("Generating Weekly Action Plan..."):
+        weekly_plan = call_grok(weekly_prompt, st.session_state.conversation_history)
+        st.session_state.weekly_plan = weekly_plan
+        return weekly_plan
 
 # ----------------- SIDEBAR -----------------
 with st.sidebar:
     st.header("Controls")
+    
     if st.button("🔥 Run Full Daily Analysis", type="primary"):
         if "current_account" in st.session_state:
             run_full_analysis(st.session_state.current_account)
-            st.success("✅ Full analysis + Weekly Action Plan ready!")
+            st.success("✅ Full Daily Analysis ready!")
         else:
             st.error("Please select an account first.")
+    
+    if st.button("📅 Run Weekly Action Plan"):
+        if "current_account" in st.session_state:
+            run_weekly_plan(st.session_state.current_account)
+            st.success("✅ Weekly Action Plan generated!")
+        else:
+            st.error("Please select an account first.")
+    
     if st.button("🔄 Refresh Portfolio Prices"):
         st.cache_data.clear()
         st.success("Prices refreshed!")
@@ -310,6 +319,11 @@ with tab1:
     st.header("Full Daily Market + Portfolio Analysis")
     if "full_analysis" in st.session_state:
         st.markdown(st.session_state.full_analysis)
+        
+        if "weekly_plan" in st.session_state:
+            st.divider()
+            st.subheader("📅 Weekly Action Plan")
+            st.markdown(st.session_state.weekly_plan)
       
         st.divider()
         st.subheader("💬 Ask Grok for Clarification")
@@ -340,7 +354,7 @@ with tab1:
             else:
                 st.warning("Please enter a question.")
     else:
-        st.info("Select an account and click 'Run Full Daily Analysis' in the sidebar.")
+        st.info("Click 'Run Full Daily Analysis' in the sidebar.")
 
 with tab2:
     st.header("💼 My Portfolio")
@@ -428,10 +442,8 @@ with tab2:
   
     st.divider()
 
-    # Current Holdings
     if not portfolio_df.empty:
         st.subheader("Current Holdings + Daily Performance")
-        
         styled_df = portfolio_df.style.format({
             "Cost Basis": "${:.2f}",
             "Current Price": "${:.2f}",
@@ -455,7 +467,6 @@ with tab2:
             return ''
         
         styled_df = styled_df.map(highlight_change, subset=['Today % Change'])
-        
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
         
         st.write("**Delete Holdings**")
@@ -469,7 +480,7 @@ with tab2:
                     st.success(f"Deleted {ticker}")
                     st.rerun()
 
-    # Pending Orders
+    # Pending Orders, Intraday Charts, Sector Chart, Pie Chart (kept from previous stable version)
     pending = load_pending_orders(selected_account)
     if not pending.empty:
         st.subheader("📋 Pending Orders")
@@ -498,7 +509,6 @@ with tab2:
                 st.success("Pending order added")
                 st.rerun()
 
-    # Intraday Charts
     if not portfolio_df.empty:
         st.subheader("📈 Intraday Charts (1D) with Cost Basis")
         st.caption("Solid red line = your cost basis per share")
@@ -512,8 +522,7 @@ with tab2:
                     hist = t.history(period="1d", interval="5m")
                     if not hist.empty:
                         fig = go.Figure()
-                        fig.add_trace(go.Scatter(x=hist.index, y=hist['Close'], mode='lines', 
-                                               line=dict(color='#1f77b4', width=2)))
+                        fig.add_trace(go.Scatter(x=hist.index, y=hist['Close'], mode='lines', line=dict(color='#1f77b4', width=2)))
                         fig.add_hline(y=cost_basis, line_dash="solid", line_color="red", line_width=2.5,
                                       annotation_text=f"Cost Basis (${cost_basis:.2f})", annotation_position="top right")
                         fig.update_layout(title=f"{ticker_symbol} Today", height=320)
@@ -521,7 +530,6 @@ with tab2:
                 except:
                     st.info(f"No intraday chart available for {ticker_symbol}")
 
-    # Sector Allocation
     if not portfolio_df.empty and total_holdings_value > 0:
         st.subheader("Sector Allocation (%)")
         sector_df = portfolio_df.groupby('Sector')['Current Value'].sum().reset_index()
@@ -529,11 +537,9 @@ with tab2:
         sector_df.loc[len(sector_df)] = ['Cash', cash, (cash / total_portfolio_value * 100) if total_portfolio_value > 0 else 0]
         sector_df = sector_df.sort_values('Percentage', ascending=False)
       
-        fig_sector = px.bar(
-            sector_df, x='Percentage', y='Sector', orientation='h',
-            title="Allocation by Sector (%)", text='Percentage',
-            color='Percentage', color_continuous_scale='Blues'
-        )
+        fig_sector = px.bar(sector_df, x='Percentage', y='Sector', orientation='h',
+                            title="Allocation by Sector (%)", text='Percentage',
+                            color='Percentage', color_continuous_scale='Blues')
         fig_sector.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
         st.plotly_chart(fig_sector, use_container_width=True)
 
