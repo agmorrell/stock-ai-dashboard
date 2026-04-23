@@ -236,6 +236,7 @@ For each existing holding and new opportunities list as bullets:
 - Provide reasoning tied to momentum and risk.
 - Assign risk level and stop-loss ideas.
 - New portfolio share count after recommendation.
+- Based on historical trending, best time of day to Buy/Sell.
 - Summarize in a table.
 
 Be detailed, specific, and actionable. Use clear headings and bullet points. Base all price-related recommendations strictly on the CURRENT REAL-TIME PRICES provided above."""
