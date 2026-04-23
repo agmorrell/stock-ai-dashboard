@@ -421,7 +421,7 @@ with tab2:
     if not portfolio_df.empty:
         st.subheader("Current Holdings + Daily Performance")
         
-        # Safe styling for the full table (shown once)
+        # Create styled dataframe once
         styled_df = portfolio_df.style.format({
             "Cost Basis": "${:.2f}",
             "Current Price": "${:.2f}",
@@ -446,16 +446,16 @@ with tab2:
         
         styled_df = styled_df.map(highlight_change, subset=['Today % Change'])
         
-        # Display the full styled table once
+        # Display the full table
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
         
-        # Delete buttons below the table
-        st.subheader("Delete Holdings")
-        cols = st.columns(4)
+        # Delete buttons (safe and simple)
+        st.write("**Delete Holdings**")
+        delete_cols = st.columns(min(4, len(portfolio_df)))
         for i, row in portfolio_df.iterrows():
             ticker = row['Ticker']
-            with cols[i % 4]:
-                if st.button(f"🗑️ {ticker}", key=f"del_hold_{selected_account}_{ticker}"):
+            with delete_cols[i % len(delete_cols)]:
+                if st.button(f"🗑️ {ticker}", key=f"del_hold_{selected_account}_{ticker}", use_container_width=True):
                     delete_holding(selected_account, ticker)
                     st.cache_data.clear()
                     st.success(f"Deleted {ticker}")
@@ -534,7 +534,7 @@ with tab2:
         fig_sector.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
         st.plotly_chart(fig_sector, use_container_width=True)
 
-    # Pie Chart
+    # Portfolio Pie Chart
     if total_portfolio_value > 0:
         st.subheader("Portfolio Allocation")
         alloc_data = portfolio_df[['Ticker', 'Current Value']].copy() if not portfolio_df.empty else pd.DataFrame(columns=['Ticker', 'Current Value'])
