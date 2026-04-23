@@ -14,59 +14,60 @@ import sqlite3
 from datetime import datetime
 
 st.set_page_config(page_title="AI Stock Dashboard", layout="wide")
-
-# ====================== PASSWORD PROTECTION ======================
-if "authenticated" not in st.session_state:
-    st.session_state.authenticated = False
-
-def check_password():
-    """Simple password check using Streamlit Secrets"""
-    password = st.text_input("Enter App Password", type="password", key="pw_input")
-    if st.button("Login"):
-        if password == st.secrets["password"]["APP_PASSWORD"]:
-            st.session_state.authenticated = True
-            st.rerun()
-        else:
-            st.error("Incorrect password. Please try again.")
-
-if not st.session_state.authenticated:
-    st.title("🔒 Protected AI Stock Dashboard")
-    st.markdown("### Please enter the password to access the dashboard")
-    check_password()
-    st.stop()  # Stop execution until authenticated
-
-# ====================== MAIN APP STARTS HERE ======================
 st.title("🚀 My Personal AI Stock Dashboard")
 st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M %p EST')}")
 
-# CSS for clean Full Analysis tab
+# Clean, minimal CSS focused on fixing spacing and run-together text
 st.markdown("""
     <style>
+    /* Consistent base styling */
     .stMarkdown, .stMarkdown p, .stMarkdown li {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        font-size: 1.04em;
-        line-height: 1.72;
-        margin-bottom: 0.9em;
+        font-size: 1.05em;
+        line-height: 1.70;
+        margin-bottom: 0.85em;
     }
+    
+    /* Force proper word wrapping */
     .stMarkdown p, .stMarkdown li {
         white-space: pre-wrap;
         word-break: break-word;
     }
-    .stMarkdown h1 { font-size: 1.85em; margin: 2em 0 0.9em 0; color: #1f77b4; }
-    .stMarkdown h2 { font-size: 1.55em; margin: 1.9em 0 0.8em 0; color: #1f77b4; }
+    
+    /* Headings - keep them nicely separated */
+    .stMarkdown h1 { font-size: 1.85em; margin: 2.0em 0 0.8em 0; color: #1f77b4; }
+    .stMarkdown h2 { font-size: 1.55em; margin: 1.8em 0 0.7em 0; color: #1f77b4; }
     .stMarkdown h3 { 
         font-size: 1.35em; 
-        margin: 1.7em 0 0.6em 0; 
+        margin: 1.6em 0 0.6em 0; 
         color: #1f77b4; 
         border-left: 5px solid #1f77b4; 
         padding-left: 12px; 
     }
+    
+    /* Tighten spacing between bullets of the same list */
     .stMarkdown ul, .stMarkdown ol {
-        padding-left: 1.9em;
-        margin-bottom: 1.2em;
+        padding-left: 1.8em;
+        margin-bottom: 1.0em;
     }
     .stMarkdown li {
-        margin-bottom: 0.55em;
+        margin-bottom: 0.5em;   /* Reduced space between bullets */
+    }
+    
+    /* Visual separation for recommendation blocks without adding extra gaps */
+    .stMarkdown h3 + ul, .stMarkdown h3 + ol {
+        background-color: #f8f9fa;
+        padding: 1.1em 1.4em;
+        border-radius: 6px;
+        border-left: 5px solid #1f77b4;
+        margin: 1.1em 0 1.4em 0;
+    }
+    
+    /* Fix italic and bold spacing */
+    .stMarkdown em, .stMarkdown i, .stMarkdown strong, .stMarkdown b {
+        font-style: italic;
+        font-weight: 600;
+        margin: 0 1px;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -99,7 +100,6 @@ def init_db():
 
 init_db()
 
-# (All your existing database functions remain the same - shortened for brevity)
 def get_accounts():
     conn = get_db_connection()
     return [row['account_name'] for row in conn.execute("SELECT account_name FROM accounts").fetchall()]
@@ -283,16 +283,6 @@ with st.sidebar:
         st.cache_data.clear()
         st.success("Prices refreshed!")
 
-    if st.button("🔓 Logout"):
-        st.session_state.authenticated = False
-        st.rerun()
-
-# ----------------- ACCOUNT MANAGEMENT -----------------
-if "current_account" not in st.session_state:
-    st.session_state.current_account = "Main Portfolio"
-
-accounts = get_accounts()
-
 # ----------------- TABS -----------------
 tab1, tab2 = st.tabs(["📈 Full Analysis", "💼 My Portfolio"])
 
@@ -326,11 +316,11 @@ with tab1:
 with tab2:
     st.header("Portfolio Tracker")
     
-    # Account Management
+    accounts = get_accounts()
     col_a, col_b = st.columns([3, 2])
     with col_a:
         selected = st.selectbox("Select Account", accounts, 
-                              index=accounts.index(st.session_state.current_account),
+                              index=accounts.index(st.session_state.get("current_account", "Main Portfolio")),
                               key="acc_select")
         st.session_state.current_account = selected
     with col_b:
