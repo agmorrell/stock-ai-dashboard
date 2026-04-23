@@ -18,7 +18,7 @@ st.set_page_config(page_title="AI Stock Dashboard", layout="wide")
 st.title("🚀 My Personal AI Stock Dashboard")
 st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M %p EST')}")
 
-# Clean CSS
+# Consistent font and spacing CSS
 st.markdown("""
     <style>
     .stMarkdown, .stMarkdown p, .stMarkdown li {
@@ -56,7 +56,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Generic cleaner (kept simple as requested)
+# Generic cleaner
 def clean_analysis_text(text):
     if not text:
         return text
@@ -72,42 +72,39 @@ def clean_analysis_text(text):
     text = re.sub(r'(\w{12,})([A-Z])', r'\1 \2', text)
     return text
 
-# New: Parse 5 Day Trading Setups into a clean table
+# Parse 5 Day Trading Setups into a clean table
 def parse_trading_setups(text):
     setups = []
     lines = text.split('\n')
-    current_setup = None
+    current = None
     
     for line in lines:
         line = line.strip()
         if not line:
             continue
-        # Detect a new setup (ticker + action like Long/Short/Breakout/Play)
-        if re.search(r'(Long|Short|Squeeze|Breakout|Play|Fade|Reverse|Gap Fill)', line, re.IGNORECASE) and re.search(r'^[A-Z]{2,5}', line):
-            if current_setup:
-                setups.append(current_setup)
-            # Extract ticker and description
+        if re.search(r'(Long|Short|Squeeze|Breakout|Play|Fade|Reverse|Gap Fill)', line, re.IGNORECASE) and re.match(r'^[A-Z]{2,5}', line):
+            if current:
+                setups.append(current)
             match = re.match(r'([A-Z]{2,5})\s*(.*)', line)
             if match:
                 ticker = match.group(1)
                 desc = match.group(2).strip()
-                current_setup = {"Ticker": ticker, "Setup": desc, "Entry": "", "Stop": "", "Target": "", "Catalyst": ""}
-        elif current_setup:
-            if "Entry" in line or "entry" in line.lower():
-                current_setup["Entry"] = re.sub(r'Entry[:\s]*', '', line, flags=re.IGNORECASE).strip()
-            elif "Stop" in line or "stop" in line.lower():
-                current_setup["Stop"] = re.sub(r'Stop[:\s]*', '', line, flags=re.IGNORECASE).strip()
-            elif "Target" in line or "target" in line.lower():
-                current_setup["Target"] = re.sub(r'Target[:\s]*', '', line, flags=re.IGNORECASE).strip()
-            elif "Catalyst" in line or "catalyst" in line.lower():
-                current_setup["Catalyst"] = re.sub(r'Catalyst[:\s]*', '', line, flags=re.IGNORECASE).strip()
+                current = {"Ticker": ticker, "Setup": desc, "Entry": "", "Stop": "", "Target": "", "Catalyst": ""}
+        elif current:
+            lower = line.lower()
+            if "entry" in lower:
+                current["Entry"] = re.sub(r'Entry[:\s]*', '', line, flags=re.IGNORECASE).strip()
+            elif "stop" in lower:
+                current["Stop"] = re.sub(r'Stop[:\s]*', '', line, flags=re.IGNORECASE).strip()
+            elif "target" in lower:
+                current["Target"] = re.sub(r'Target[:\s]*', '', line, flags=re.IGNORECASE).strip()
+            elif "catalyst" in lower:
+                current["Catalyst"] = re.sub(r'Catalyst[:\s]*', '', line, flags=re.IGNORECASE).strip()
     
-    if current_setup:
-        setups.append(current_setup)
+    if current:
+        setups.append(current)
     
-    if setups:
-        return pd.DataFrame(setups)
-    return None
+    return pd.DataFrame(setups) if setups else None
 
 # ----------------- DATABASE -----------------
 def get_db_connection():
@@ -303,8 +300,6 @@ Be detailed, specific, and actionable. Use headings and bullets."""
     with st.spinner("Generating full analysis..."):
         raw_result = call_grok(prompt)
         cleaned = clean_analysis_text(raw_result)
-        
-        # Store raw cleaned text
         st.session_state.full_analysis = cleaned
         st.session_state.conversation_history = [
             {"role": "user", "content": prompt},
@@ -312,7 +307,7 @@ Be detailed, specific, and actionable. Use headings and bullets."""
         ]
         return cleaned
 
-# ----------------- SIDEBAR & TABS -----------------
+# ----------------- UI -----------------
 with st.sidebar:
     st.header("Controls")
     if st.button("🔥 Run Full Daily Analysis", type="primary"):
@@ -330,26 +325,24 @@ with tab1:
     if "full_analysis" in st.session_state:
         full_text = st.session_state.full_analysis
         
-        # Split the text into sections
-        sections = re.split(r'(?m)^(#{1,3}\s|5 Day Trading Setups)', full_text)
-        
-        for i, section in enumerate(sections):
-            if not section.strip():
+        # Split and render sections
+        parts = re.split(r'(?m)^(#{1,3}\s|5 Day Trading Setups)', full_text)
+        for part in parts:
+            if not part or not part.strip():
                 continue
-            if "5 Day Trading Setups" in section or "day trading setups" in section.lower():
+            if "5 Day Trading Setups" in part or "day trading setups" in part.lower():
                 st.subheader("📊 5 Day Trading Setups")
-                setups_df = parse_trading_setups(full_text)
-                if setups_df is not None and not setups_df.empty:
-                    # Display as nice table
+                df_setups = parse_trading_setups(full_text)
+                if df_setups is not None and not df_setups.empty:
                     st.dataframe(
-                        setups_df.style.set_properties(**{'text-align': 'left'}),
+                        df_setups.style.set_properties(**{'text-align': 'left'}),
                         use_container_width=True,
                         hide_index=True
                     )
                 else:
-                    st.markdown(section)
+                    st.markdown(part)
             else:
-                st.markdown(section)
+                st.markdown(part)
         
         st.divider()
         st.subheader("💬 Ask Grok for Clarification")
@@ -372,11 +365,151 @@ with tab1:
                 st.markdown("**Grok:**")
                 st.markdown(cleaned_resp)
     else:
-        st.info("Click 'Run Full Daily Analysis' in sidebar.")
+        st.info("Click 'Run Full Daily Analysis' in sidebar to generate today's report.")
 
 with tab2:
-    # (Your existing Portfolio tab code remains unchanged - omitted here for brevity)
-    # ... [all the portfolio code you already have]
-    st.info("Portfolio tab code is unchanged from previous version.")
+    st.header("💼 My Portfolio")
+    
+    accounts = get_accounts()
+    col_a, col_b = st.columns([3, 2])
+    with col_a:
+        selected = st.selectbox("Select Account", accounts, 
+                              index=accounts.index(st.session_state.get("current_account", "Main Portfolio")),
+                              key="acc_select")
+        st.session_state.current_account = selected
+    with col_b:
+        new_acc = st.text_input("New Account Name", placeholder="IRA", key="new_acc")
+        if st.button("Create Account"):
+            if new_acc.strip():
+                add_account(new_acc.strip())
+                st.success(f"Created {new_acc}")
+                st.rerun()
+
+    curr_risk = get_risk_tolerance(selected)
+    new_risk = st.selectbox("Risk Tolerance", ["Conservative", "Moderate", "Aggressive"], 
+                           index=["Conservative","Moderate","Aggressive"].index(curr_risk))
+    if new_risk != curr_risk:
+        set_risk_tolerance(selected, new_risk)
+        st.success("Risk tolerance updated")
+        st.rerun()
+
+    st.divider()
+
+    cash = get_cash_balance(selected)
+    new_cash = st.number_input("Cash Balance ($)", value=cash, step=100.0)
+    if st.button("Update Cash"):
+        update_cash_balance(selected, new_cash)
+        st.success("Cash updated")
+        st.rerun()
+
+    st.divider()
+
+    with st.expander("➕ Add Holding"):
+        c1, c2, c3 = st.columns(3)
+        with c1: ticker = st.text_input("Ticker", key="tkr").upper()
+        with c2: shares = st.number_input("Shares", min_value=0.01, value=10.0, key="sh")
+        with c3: cost = st.number_input("Cost Basis $", min_value=0.01, value=150.0, key="cb")
+        if st.button("Save Holding"):
+            if ticker:
+                save_holding(selected, ticker, shares, cost)
+                st.cache_data.clear()
+                st.success(f"Saved {ticker}")
+                st.rerun()
+
+    with st.expander("📋 Add Pending Order"):
+        c1, c2 = st.columns(2)
+        with c1:
+            po_tkr = st.text_input("Ticker", key="po_tkr").upper()
+            po_type = st.selectbox("Type", ["Buy", "Sell"], key="po_type")
+        with c2:
+            po_shares = st.number_input("Shares", min_value=0.01, value=10.0, key="po_sh")
+            po_price = st.number_input("Limit Price $", min_value=0.01, value=150.0, key="po_pr")
+        if st.button("Add Pending Order"):
+            if po_tkr:
+                add_pending_order(selected, po_tkr, po_type, po_shares, po_price)
+                st.success("Pending order added")
+                st.rerun()
+
+    df = calculate_portfolio(selected)
+    cash = get_cash_balance(selected)
+    total_value = (df["Current Value"].sum() if not df.empty else 0) + cash
+
+    st.subheader("📊 Performance Metrics")
+    cols = st.columns(6)
+    with cols[0]: st.metric("Total Value", f"${total_value:,.2f}")
+    with cols[1]: st.metric("Unrealized P/L", f"${df['Unrealized Gain $'].sum():,.2f}" if not df.empty else "$0.00")
+    with cols[2]: st.metric("Avg Return %", f"{df['Unrealized Gain %'].mean():.2f}%" if not df.empty else "0.00%")
+    with cols[3]: st.metric("Positions", len(df))
+    with cols[4]: st.metric("Largest Position %", f"{(df['Current Value'].max() / total_value * 100):.2f}%" if not df.empty and total_value > 0 else "0.00%")
+    with cols[5]: st.metric("Cash %", f"{(cash / total_value * 100):.2f}%" if total_value > 0 else "0.00%")
+
+    st.divider()
+
+    if not df.empty:
+        st.subheader("Current Holdings + Daily Performance")
+        styled_df = df.style.format({
+            "Cost Basis": "${:.2f}",
+            "Current Price": "${:.2f}",
+            "Current Value": "${:.2f}",
+            "Unrealized Gain $": "${:.2f}",
+            "Unrealized Gain %": "{:.2f}%",
+            "Today % Change": "{:.2f}%"
+        }).apply(
+            lambda x: ['color: #00cc00' if isinstance(v, (int, float)) and v > 0 else 
+                       'color: #ff4444' if isinstance(v, (int, float)) and v < 0 else '' for v in x], 
+            subset=['Today % Change']
+        )
+        st.dataframe(styled_df, use_container_width=True, hide_index=True)
+
+    if not df.empty:
+        st.subheader("📈 Intraday Charts (1D) with Cost Basis")
+        st.caption("Solid red line = your cost basis per share")
+        cols = st.columns(3)
+        for i, row in df.iterrows():
+            ticker_symbol = row['Ticker']
+            cost_basis = row['Cost Basis']
+            with cols[i % 3]:
+                try:
+                    t = Ticker(ticker_symbol)
+                    hist = t.history(period="1d", interval="5m")
+                    if not hist.empty:
+                        fig = go.Figure()
+                        fig.add_trace(go.Scatter(x=hist.index, y=hist['Close'], mode='lines', line=dict(color='#1f77b4', width=2)))
+                        fig.add_hline(y=cost_basis, line_dash="solid", line_color="red", line_width=2.5,
+                                      annotation_text=f"Cost Basis (${cost_basis:.2f})", annotation_position="top right")
+                        fig.update_layout(title=f"{ticker_symbol} Today", height=300)
+                        st.plotly_chart(fig, use_container_width=True, key=f"chart_{i}")
+                except:
+                    st.info(f"No chart for {ticker_symbol}")
+
+    if total_value > 0:
+        st.subheader("Allocation Charts")
+        c1, c2 = st.columns(2)
+        with c1:
+            pie_data = df[['Ticker', 'Current Value']].copy()
+            pie_data.loc[len(pie_data)] = ['Cash', cash]
+            st.plotly_chart(px.pie(pie_data, values='Current Value', names='Ticker', title="Portfolio Allocation (Including Cash)", hole=0.45), use_container_width=True)
+        with c2:
+            sector_df = df.groupby('Sector')['Current Value'].sum().reset_index()
+            sector_df['Percentage'] = (sector_df['Current Value'] / df['Current Value'].sum() * 100) if not df.empty else 0
+            sector_df.loc[len(sector_df)] = ['Cash', cash, (cash / total_value * 100)]
+            sector_df = sector_df.sort_values('Percentage', ascending=False)
+            fig_sector = px.bar(sector_df, x='Percentage', y='Sector', orientation='h', title="Sector Allocation (%)", text='Percentage', color='Percentage', color_continuous_scale='Blues')
+            fig_sector.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
+            st.plotly_chart(fig_sector, use_container_width=True)
+
+    pending = load_pending_orders(selected)
+    if not pending.empty:
+        st.subheader("📋 Pending Orders")
+        for _, row in pending.iterrows():
+            col1, col2, col3 = st.columns([5, 2, 1])
+            with col1:
+                st.write(f"**{row['ticker']}** — {row['order_type']} {row['shares']:.2f} shares @ **${row['limit_price']:.2f}**")
+            with col3:
+                if st.button("🗑️", key=f"del_po_{row['id']}"):
+                    delete_pending_order(row['id'])
+                    st.rerun()
+
+    st.info(f"Available Cash: **${cash:,.2f}**")
 
 st.caption("Built with Streamlit + yfinance + Grok API")
