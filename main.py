@@ -254,8 +254,7 @@ Use this exact structure:
 **Friday:**
 - ...
 
-Focus on high-priority moves, risk management, and following through on the recommendations. 
-Include monitoring tasks and any stop-loss adjustments. Make it realistic for a {risk_tolerance.lower()} risk tolerance investor."""
+Focus on high-priority moves, risk management, and following through on the recommendations."""
 
         with st.spinner("Creating Weekly Action Plan..."):
             weekly_plan = call_grok(weekly_prompt, [
@@ -417,15 +416,13 @@ with tab2:
     with col6: st.metric("Cash Allocation", f"{cash_pct:.1f}%")
   
     st.divider()
-  
-    # ==================== CURRENT HOLDINGS WITH DELETE BUTTONS ====================
+
+    # ==================== FIXED CURRENT HOLDINGS SECTION ====================
     if not portfolio_df.empty:
         st.subheader("Current Holdings + Daily Performance")
         
-        display_df = portfolio_df.copy()
-        
-        # Safe styling
-        styled_df = display_df.style.format({
+        # Safe styling for the full table (shown once)
+        styled_df = portfolio_df.style.format({
             "Cost Basis": "${:.2f}",
             "Current Price": "${:.2f}",
             "Current Value": "${:.2f}",
@@ -449,23 +446,21 @@ with tab2:
         
         styled_df = styled_df.map(highlight_change, subset=['Today % Change'])
         
-        # Show each row with its own delete button (more stable approach)
-        for idx, row in portfolio_df.iterrows():
+        # Display the full styled table once
+        st.dataframe(styled_df, use_container_width=True, hide_index=True)
+        
+        # Delete buttons below the table
+        st.subheader("Delete Holdings")
+        cols = st.columns(4)
+        for i, row in portfolio_df.iterrows():
             ticker = row['Ticker']
-            col_main, col_delete = st.columns([9, 1])
-            with col_main:
-                # Display only this row
-                st.dataframe(
-                    styled_df.iloc[[idx]], 
-                    use_container_width=True, 
-                    hide_index=True
-                )
-            with col_delete:
-                if st.button("🗑️", key=f"del_hold_{selected_account}_{ticker}"):
+            with cols[i % 4]:
+                if st.button(f"🗑️ {ticker}", key=f"del_hold_{selected_account}_{ticker}"):
                     delete_holding(selected_account, ticker)
                     st.cache_data.clear()
-                    st.success(f"✅ Deleted {ticker}")
+                    st.success(f"Deleted {ticker}")
                     st.rerun()
+
     # Pending Orders
     pending = load_pending_orders(selected_account)
     if not pending.empty:
@@ -518,7 +513,7 @@ with tab2:
                 except:
                     st.info(f"No intraday chart available for {ticker_symbol}")
 
-    # Sector Allocation Bar Chart (Restored)
+    # Sector Allocation Bar Chart
     if not portfolio_df.empty and total_holdings_value > 0:
         st.subheader("Sector Allocation (%)")
         sector_df = portfolio_df.groupby('Sector')['Current Value'].sum().reset_index()
@@ -539,6 +534,7 @@ with tab2:
         fig_sector.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
         st.plotly_chart(fig_sector, use_container_width=True)
 
+    # Pie Chart
     if total_portfolio_value > 0:
         st.subheader("Portfolio Allocation")
         alloc_data = portfolio_df[['Ticker', 'Current Value']].copy() if not portfolio_df.empty else pd.DataFrame(columns=['Ticker', 'Current Value'])
