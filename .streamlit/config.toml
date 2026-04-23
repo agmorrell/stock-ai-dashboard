@@ -1,6 +1,15 @@
 [theme]
-base = "light"        # or "dark"
-primaryColor = "#00ccff"
-backgroundColor = "#0e1117"
-secondaryBackgroundColor = "#262730"
-textColor = "#fafafa"
+# Set to light mode by default
+base = "light"
+
+# Light theme colors (clean and professional)
+primaryColor = "#0066cc"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f0f2f6"
+textColor = "#31333f"
+
+# Optional: Font settings
+font = "sans serif"
+
+[server]
+headless = true
