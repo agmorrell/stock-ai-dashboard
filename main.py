@@ -11,97 +11,20 @@ import os
 import time
 import random
 import sqlite3
-import re
 from datetime import datetime
 
 st.set_page_config(page_title="AI Stock Dashboard", layout="wide")
 st.title("🚀 My Personal AI Stock Dashboard")
 st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M %p EST')}")
 
-# Clean CSS
+# CSS
 st.markdown("""
     <style>
-    .stMarkdown, .stMarkdown p, .stMarkdown li {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        font-size: 1.06em;
-        line-height: 1.78;
-        margin-bottom: 0.9em;
-    }
-    .stMarkdown p, .stMarkdown li {
-        white-space: pre-wrap;
-        word-break: break-word;
-        overflow-wrap: break-word;
-    }
-    .stMarkdown h1 { font-size: 1.9em; margin: 2.2em 0 0.9em 0; color: #1f77b4; }
-    .stMarkdown h2 { font-size: 1.6em; margin: 1.9em 0 0.8em 0; color: #1f77b4; }
-    .stMarkdown h3 { 
-        font-size: 1.4em; 
-        margin: 1.7em 0 0.7em 0; 
-        color: #1f77b4; 
-        border-left: 5px solid #1f77b4; 
-        padding-left: 12px; 
-    }
-    .stMarkdown ul, .stMarkdown ol {
-        padding-left: 2.0em;
-        margin-bottom: 1.2em;
-    }
-    .stMarkdown li { margin-bottom: 0.65em; }
-    .stMarkdown h3 + ul, .stMarkdown h3 + ol {
-        background-color: #f8f9fa;
-        padding: 1.3em 1.6em;
-        border-radius: 8px;
-        border-left: 5px solid #1f77b4;
-        margin: 1.3em 0;
-    }
+    div[data-testid="stMetricValue"] { font-size: 1.45em !important; font-weight: 600 !important; }
+    div[data-testid="stMetricLabel"] { font-size: 0.85em !important; color: #666666; }
+    .stMarkdown h2, .stMarkdown h3 { margin-top: 1.5em; margin-bottom: 0.8em; }
     </style>
 """, unsafe_allow_html=True)
-
-# Generic cleaner
-def clean_analysis_text(text):
-    if not text:
-        return text
-    text = re.sub(r'([a-zA-Z0-9)])([.,;:/])([a-zA-Z])', r'\1\2 \3', text)
-    text = re.sub(r'([a-zA-Z)])([0-9])', r'\1 \2', text)
-    text = re.sub(r'([0-9])([a-zA-Z(])', r'\1 \2', text)
-    text = re.sub(r'([0-9.])(−|-)([0-9.])', r'\1 - \3', text)
-    text = re.sub(r'([0-9a-zA-Z)])([/\\+])([0-9a-zA-Z(])', r'\1 \2 \3', text)
-    text = re.sub(r'\)([a-zA-Z0-9])', r') \1', text)
-    text = re.sub(r'([a-zA-Z0-9])\(', r'\1 (', text)
-    text = re.sub(r'([0-9,]+)\)([a-zA-Z])', r'\1) \2', text)
-    text = re.sub(r'([a-z0-9)])([A-Z])', r'\1 \2', text)
-    text = re.sub(r'(\w{12,})([A-Z])', r'\1 \2', text)
-    return text
-
-# Parse 5 Day Trading Setups into table
-def parse_trading_setups(text):
-    setups = []
-    lines = text.split('\n')
-    current = None
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
-        if re.search(r'(Long|Short|Squeeze|Breakout|Play|Fade|Reverse|Gap Fill)', line, re.IGNORECASE) and re.match(r'^[A-Z]{2,5}', line):
-            if current:
-                setups.append(current)
-            match = re.match(r'([A-Z]{2,5})\s*(.*)', line)
-            if match:
-                ticker = match.group(1)
-                desc = match.group(2).strip()
-                current = {"Ticker": ticker, "Setup": desc, "Entry": "", "Stop": "", "Target": "", "Catalyst": ""}
-        elif current:
-            lower = line.lower()
-            if "entry" in lower:
-                current["Entry"] = re.sub(r'Entry[:\s]*', '', line, flags=re.IGNORECASE).strip()
-            elif "stop" in lower:
-                current["Stop"] = re.sub(r'Stop[:\s]*', '', line, flags=re.IGNORECASE).strip()
-            elif "target" in lower:
-                current["Target"] = re.sub(r'Target[:\s]*', '', line, flags=re.IGNORECASE).strip()
-            elif "catalyst" in lower:
-                current["Catalyst"] = re.sub(r'Catalyst[:\s]*', '', line, flags=re.IGNORECASE).strip()
-    if current:
-        setups.append(current)
-    return pd.DataFrame(setups) if setups else None
 
 # ----------------- DATABASE -----------------
 def get_db_connection():
@@ -115,15 +38,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS accounts (account_name TEXT PRIMARY KEY, risk_tolerance TEXT DEFAULT 'Moderate');
         CREATE TABLE IF NOT EXISTS holdings (account_name TEXT, ticker TEXT, shares REAL, cost_basis REAL, PRIMARY KEY (account_name, ticker));
         CREATE TABLE IF NOT EXISTS cash_balance (account_name TEXT PRIMARY KEY, cash REAL DEFAULT 0);
-        CREATE TABLE IF NOT EXISTS pending_orders (
-            id INTEGER PRIMARY KEY, 
-            account_name TEXT, 
-            ticker TEXT, 
-            order_type TEXT, 
-            shares REAL, 
-            limit_price REAL, 
-            status TEXT DEFAULT 'Pending'
-        );
+        CREATE TABLE IF NOT EXISTS pending_orders (id INTEGER PRIMARY KEY, account_name TEXT, ticker TEXT, order_type TEXT, shares REAL, limit_price REAL, status TEXT DEFAULT 'Pending');
     ''')
     conn.execute("INSERT OR IGNORE INTO accounts (account_name, risk_tolerance) VALUES ('Main Portfolio', 'Moderate')")
     conn.commit()
@@ -133,11 +48,13 @@ init_db()
 
 def get_accounts():
     conn = get_db_connection()
-    return [row['account_name'] for row in conn.execute("SELECT account_name FROM accounts").fetchall()]
+    accounts = [row['account_name'] for row in conn.execute("SELECT account_name FROM accounts").fetchall()]
+    conn.close()
+    return accounts
 
-def add_account(account_name):
+def add_account(account_name, risk_tolerance="Moderate"):
     conn = get_db_connection()
-    conn.execute("INSERT OR IGNORE INTO accounts (account_name, risk_tolerance) VALUES (?, 'Moderate')", (account_name,))
+    conn.execute("INSERT OR IGNORE INTO accounts (account_name, risk_tolerance) VALUES (?, ?)", (account_name, risk_tolerance))
     conn.commit()
     conn.close()
 
@@ -162,7 +79,7 @@ def load_holdings(account_name):
 def save_holding(account_name, ticker, shares, cost_basis):
     conn = get_db_connection()
     conn.execute("INSERT OR REPLACE INTO holdings (account_name, ticker, shares, cost_basis) VALUES (?, ?, ?, ?)",
-                 (account_name, ticker.upper(), float(shares), float(cost_basis)))
+                 (account_name, ticker.upper(), shares, cost_basis))
     conn.commit()
     conn.close()
 
@@ -176,18 +93,18 @@ def get_cash_balance(account_name):
     conn = get_db_connection()
     row = conn.execute("SELECT cash FROM cash_balance WHERE account_name = ?", (account_name,)).fetchone()
     conn.close()
-    return float(row['cash']) if row else 0.0
+    return row['cash'] if row else 0.0
 
 def update_cash_balance(account_name, new_cash):
     conn = get_db_connection()
-    conn.execute("REPLACE INTO cash_balance (account_name, cash) VALUES (?, ?)", (account_name, float(new_cash)))
+    conn.execute("REPLACE INTO cash_balance (account_name, cash) VALUES (?, ?)", (account_name, new_cash))
     conn.commit()
     conn.close()
 
 def add_pending_order(account_name, ticker, order_type, shares, limit_price):
     conn = get_db_connection()
     conn.execute("""INSERT INTO pending_orders (account_name, ticker, order_type, shares, limit_price) 
-                    VALUES (?, ?, ?, ?, ?)""", (account_name, ticker.upper(), order_type, float(shares), float(limit_price)))
+                    VALUES (?, ?, ?, ?, ?)""", (account_name, ticker.upper(), order_type, shares, limit_price))
     conn.commit()
     conn.close()
 
@@ -212,20 +129,22 @@ def calculate_portfolio(account_name):
     
     data = []
     for _, row in df.iterrows():
+        ticker_symbol = row['ticker']
         try:
             time.sleep(random.uniform(0.5, 1.0))
-            ticker = Ticker(row['ticker'])
+            ticker = Ticker(ticker_symbol)
             info = ticker.info
-            current_price = float(info.get('currentPrice') or info.get('regularMarketPrice') or info.get('previousClose') or 0)
+            current_price = float(info.get('currentPrice') or info.get('regularMarketPrice') or info.get('previousClose') or 0.0)
             sector = info.get('sector') or "Other"
-            today_change = float(info.get('regularMarketChangePercent') or 0)
+            today_change_pct = float(info.get('regularMarketChangePercent') or 0.0)
             
             current_value = row['shares'] * current_price
-            gain_dollar = current_value - (row['shares'] * row['cost_basis'])
-            gain_pct = (gain_dollar / (row['shares'] * row['cost_basis']) * 100) if row['cost_basis'] > 0 else 0
+            cost = row['shares'] * row['cost_basis']
+            gain_dollar = current_value - cost
+            gain_pct = (gain_dollar / cost * 100) if cost > 0 else 0.0
             
             data.append({
-                'Ticker': row['ticker'],
+                'Ticker': ticker_symbol,
                 'Shares': round(row['shares'], 4),
                 'Cost Basis': round(row['cost_basis'], 2),
                 'Current Price': round(current_price, 2),
@@ -233,29 +152,39 @@ def calculate_portfolio(account_name):
                 'Unrealized Gain $': round(gain_dollar, 2),
                 'Unrealized Gain %': round(gain_pct, 2),
                 'Sector': sector,
-                'Today % Change': round(today_change, 2)
+                'Today % Change': round(today_change_pct, 2)
             })
-        except:
-            data.append({'Ticker': row['ticker'], 'Shares': row['shares'], 'Cost Basis': row['cost_basis'],
-                         'Current Price': "N/A", 'Current Value': "N/A", 'Unrealized Gain $': "N/A",
-                         'Unrealized Gain %': "N/A", 'Sector': "Other", 'Today % Change': "N/A"})
+        except Exception:
+            data.append({
+                'Ticker': ticker_symbol,
+                'Shares': round(row['shares'], 4),
+                'Cost Basis': round(row['cost_basis'], 2),
+                'Current Price': "N/A",
+                'Current Value': "N/A",
+                'Unrealized Gain $': "N/A",
+                'Unrealized Gain %': "N/A",
+                'Sector': "Other",
+                'Today % Change': "N/A"
+            })
+    
     return pd.DataFrame(data)
 
 # ----------------- GROK API -----------------
-def call_grok(prompt, history=None):
+def call_grok(prompt, conversation_history=None):
     api_key = os.environ.get("GROK_API_KEY")
     if not api_key:
         return "❌ Grok API key not found."
     
-    messages = history or []
+    model = "grok-4.1-fast-reasoning"
+    messages = conversation_history or []
     messages.append({"role": "user", "content": prompt})
     
     try:
         response = requests.post(
             "https://api.x.ai/v1/chat/completions",
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={"model": "grok-4-1-fast-reasoning", "messages": messages, "temperature": 0.7, "max_tokens": 7000},
-            timeout=120
+            json={"model": model, "messages": messages, "temperature": 0.7, "max_tokens": 7000},
+            timeout=150
         )
         if response.status_code != 200:
             return f"❌ API Error {response.status_code}"
@@ -263,259 +192,264 @@ def call_grok(prompt, history=None):
     except Exception as e:
         return f"❌ Request Error: {str(e)}"
 
-# ----------------- FULL ANALYSIS -----------------
+# ----------------- FULL ANALYSIS (Detailed) -----------------
 def run_full_analysis(selected_account):
     today = datetime.now().strftime("%B %d, %Y")
     portfolio_df = calculate_portfolio(selected_account)
     cash = get_cash_balance(selected_account)
-    risk = get_risk_tolerance(selected_account)
+    risk_tolerance = get_risk_tolerance(selected_account)
     pending_df = load_pending_orders(selected_account)
     
-    prompt = f"""You are a professional market analyst with **{risk.lower()} risk tolerance**. Date: {today}.
+    portfolio_text = portfolio_df.to_string(index=False) if not portfolio_df.empty else "No holdings yet."
+    pending_text = pending_df.to_string(index=False) if not pending_df.empty else "No pending orders."
+    
+    prompt = f"""You are a professional market analyst and portfolio manager with a **{risk_tolerance.lower()} risk tolerance**. Today's date is {today}.
 
-Portfolio ({selected_account}):
-Cash: ${cash:,.2f}
-Holdings:\n{portfolio_df.to_string(index=False) if not portfolio_df.empty else "None"}
-Pending Orders:\n{pending_df.to_string(index=False) if not pending_df.empty else "None"}
+Current Portfolio Snapshot (Account: {selected_account}):
+Cash Available: ${cash:,.2f}
+Holdings:
+{portfolio_text}
+Pending Orders:
+{pending_text}
 
 **Part 1: Market Overview**
-- Highest short-term momentum sectors + why
-- 10-stock watchlist with volatility/volume/catalysts
-- 5 day trading setups (entry, stop, target)
-- Capital management strategy
-- Upcoming catalysts this week
+1. Identify the stock sectors with the **highest short-term momentum** right now and explain why they are leading.
+2. Build a high-probability watchlist: Recommend 10 stocks with strong volatility, volume, and catalyst potential, prioritizing those in the top momentum sectors.
+3. Create 5 actionable day trading setups with specific entry zones, stop losses, and profit targets.
+4. Suggest a capital management strategy suitable for {risk_tolerance.lower()} risk tolerance.
+5. List upcoming earnings, macro events, or news catalysts this week.
 
-**Part 2: Personalized Recommendations**
-For every holding and new ideas:
-- Clear **Buy/Sell/Hold/Trim/Add** with specific share amounts or % of cash
-- Entry/exit zones or triggers
-- Reasoning tied to momentum
-- Risk level and stop-loss ideas
+**Part 2: Personalized Recommendations (Focus on Highest Momentum Sectors)**
+For each existing holding and new opportunities:
+- Give a clear **Buy / Sell / Hold / Trim / Add** recommendation.
+- Suggest specific entry or exit price zones or technical triggers.
+- State **how much** to buy or sell (specific share counts or % of cash/portfolio).
+- Recommend where to diversify or concentrate based on momentum.
+- Provide clear reasoning tied to current momentum, catalysts, risk, and your cash/pending orders.
+- Assign a risk level (Low / Medium / High) and suggest stop-loss ideas.
 
-Be detailed, specific, and actionable. Use headings and bullets."""
+**Overall Portfolio Strategy**
+- Aggressive cash deployment suggestions focused on highest momentum sectors.
+- Advice on pending orders (keep, modify, or cancel).
+- Rebalancing summary.
+- How to compound daily gains responsibly.
 
-    with st.spinner("Generating full analysis..."):
-        raw_result = call_grok(prompt)
-        cleaned = clean_analysis_text(raw_result)
-        st.session_state.full_analysis = cleaned
+Be very detailed, specific, and actionable. Use clear headings and bullet points."""
+
+    with st.spinner(f"Generating full detailed analysis for {selected_account}..."):
+        result = call_grok(prompt)
+        st.session_state.full_analysis = result
+        # Initialize conversation history if it doesn't exist
+        if "conversation_history" not in st.session_state:
+            st.session_state.conversation_history = []
         st.session_state.conversation_history = [
             {"role": "user", "content": prompt},
-            {"role": "assistant", "content": cleaned}
+            {"role": "assistant", "content": result}
         ]
-        return cleaned
+        return result
 
-# ----------------- UI -----------------
+# ----------------- SIDEBAR -----------------
 with st.sidebar:
     st.header("Controls")
     if st.button("🔥 Run Full Daily Analysis", type="primary"):
-        run_full_analysis(st.session_state.get("current_account", "Main Portfolio"))
-        st.success("Analysis complete!")
+        if "current_account" in st.session_state:
+            run_full_analysis(st.session_state.current_account)
+            st.success("✅ Full detailed analysis ready!")
+        else:
+            st.error("Please select an account first.")
 
-    if st.button("🔄 Refresh Prices"):
+    if st.button("🔄 Refresh Portfolio Prices"):
         st.cache_data.clear()
         st.success("Prices refreshed!")
 
+# ----------------- ACCOUNT MANAGEMENT -----------------
+if "current_account" not in st.session_state:
+    st.session_state.current_account = "Main Portfolio"
+
+accounts = get_accounts()
+
+# ----------------- TABS -----------------
 tab1, tab2 = st.tabs(["📈 Full Analysis", "💼 My Portfolio"])
 
 with tab1:
     st.header("Full Daily Market + Portfolio Analysis")
     if "full_analysis" in st.session_state:
-        full_text = st.session_state.full_analysis
-        parts = re.split(r'(?m)^(#{1,3}\s|5 Day Trading Setups)', full_text)
-        for part in parts:
-            if not part or not part.strip():
-                continue
-            if "5 Day Trading Setups" in part or "day trading setups" in part.lower():
-                st.subheader("📊 5 Day Trading Setups")
-                df_setups = parse_trading_setups(full_text)
-                if df_setups is not None and not df_setups.empty:
-                    st.dataframe(
-                        df_setups.style.set_properties(**{'text-align': 'left'}),
-                        use_container_width=True,
-                        hide_index=True
-                    )
-                else:
-                    st.markdown(part)
-            else:
-                st.markdown(part)
+        st.markdown(st.session_state.full_analysis)
         
         st.divider()
         st.subheader("💬 Ask Grok for Clarification")
-        st.markdown("""<p style="color:#888; font-style:italic; font-size:0.95em;">
-        Example questions:<br>
-        • “Why did you recommend selling AAPL?”<br>
-        • “Can you explain the entry zone for NVDA?”<br>
-        • “Should I add more to energy sector?”
-        </p>""", unsafe_allow_html=True)
+        st.markdown(
+            """
+            <p style="color: #888888; font-style: italic; font-size: 0.95em;">
+            You can ask follow-up questions like:<br>
+            • “Why did you recommend selling AAPL?”<br>
+            • “Can you explain the entry zone for NVDA?”<br>
+            • “Should I add more to energy sector?”
+            </p>
+            """, 
+            unsafe_allow_html=True
+        )
         
-        q = st.text_input("Your question:", placeholder="Ask Grok...", key="q_input")
-        if st.button("Send to Grok", key="send_q"):
-            if q.strip():
-                if "conversation_history" not in st.session_state:
-                    st.session_state.conversation_history = []
-                raw_resp = call_grok(q, st.session_state.conversation_history)
-                cleaned_resp = clean_analysis_text(raw_resp)
-                st.session_state.conversation_history.append({"role": "user", "content": q})
-                st.session_state.conversation_history.append({"role": "assistant", "content": cleaned_resp})
-                st.markdown("**Grok:**")
-                st.markdown(cleaned_resp)
+        user_question = st.text_input("Your question:", placeholder="Type your question here...", key="followup_input")
+        
+        if st.button("Send Question to Grok", key="send_followup"):
+            if user_question.strip():
+                with st.spinner("Getting clarification from Grok..."):
+                    # Ensure conversation_history exists
+                    if "conversation_history" not in st.session_state:
+                        st.session_state.conversation_history = []
+                    
+                    response = call_grok(user_question, st.session_state.conversation_history)
+                    st.session_state.conversation_history.append({"role": "user", "content": user_question})
+                    st.session_state.conversation_history.append({"role": "assistant", "content": response})
+                    st.markdown("**Grok's Response:**")
+                    st.markdown(response)
+            else:
+                st.warning("Please enter a question.")
     else:
-        st.info("Click 'Run Full Daily Analysis' in sidebar.")
+        st.info("Select an account and click 'Run Full Daily Analysis' in the sidebar.")
 
 with tab2:
-    st.header("💼 My Portfolio")
+    st.header("Portfolio Tracker")
     
-    accounts = get_accounts()
-    col_a, col_b = st.columns([3, 2])
-    with col_a:
-        selected = st.selectbox("Select Account", accounts, 
-                              index=accounts.index(st.session_state.get("current_account", "Main Portfolio")),
-                              key="acc_select")
-        st.session_state.current_account = selected
-    with col_b:
-        new_acc = st.text_input("New Account Name", placeholder="IRA", key="new_acc")
-        if st.button("Create Account"):
-            if new_acc.strip():
-                add_account(new_acc.strip())
-                st.success(f"Created {new_acc}")
+    # Account Selector + New Account
+    st.subheader("Portfolio Account")
+    col1, col2 = st.columns([3, 2])
+    with col1:
+        selected_account = st.selectbox("Select Account", accounts, 
+                                      index=accounts.index(st.session_state.current_account) 
+                                            if st.session_state.current_account in accounts else 0,
+                                      key="account_selector")
+        st.session_state.current_account = selected_account
+
+    with col2:
+        new_name = st.text_input("New Account Name", placeholder="e.g. IRA", key="new_account_name")
+        if st.button("Create New Account"):
+            if new_name.strip():
+                add_account(new_name.strip())
+                st.success(f"Account '{new_name}' created!")
                 st.rerun()
 
-    curr_risk = get_risk_tolerance(selected)
+    # Risk Tolerance
+    current_risk = get_risk_tolerance(selected_account)
     new_risk = st.selectbox("Risk Tolerance", ["Conservative", "Moderate", "Aggressive"], 
-                           index=["Conservative","Moderate","Aggressive"].index(curr_risk))
-    if new_risk != curr_risk:
-        set_risk_tolerance(selected, new_risk)
-        st.success("Risk tolerance updated")
+                           index=["Conservative", "Moderate", "Aggressive"].index(current_risk))
+    if new_risk != current_risk:
+        set_risk_tolerance(selected_account, new_risk)
+        st.success(f"Risk tolerance updated to {new_risk}")
         st.rerun()
 
     st.divider()
 
-    cash = get_cash_balance(selected)
-    new_cash = st.number_input("Cash Balance ($)", value=float(cash), step=100.0)
-    if st.button("Update Cash"):
-        update_cash_balance(selected, new_cash)
-        st.success("Cash updated")
+    # Cash Balance
+    st.subheader("💰 Cash Balance")
+    current_cash = get_cash_balance(selected_account)
+    new_cash = st.number_input("Update Cash Available ($)", min_value=0.0, value=current_cash, step=100.0)
+    if st.button("Update Cash Balance"):
+        update_cash_balance(selected_account, new_cash)
+        st.success(f"Cash updated to ${new_cash:,.2f}")
         st.rerun()
 
     st.divider()
 
-    with st.expander("➕ Add Holding"):
-        c1, c2, c3 = st.columns(3)
-        with c1: ticker = st.text_input("Ticker", key="tkr").upper()
-        with c2: shares = st.number_input("Shares", min_value=0.01, value=10.0, key="sh")
-        with c3: cost = st.number_input("Cost Basis $", min_value=0.01, value=150.0, key="cb")
-        if st.button("Save Holding"):
+    # Add Holding
+    with st.expander("➕ Add or Update Holding"):
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            ticker = st.text_input("Ticker Symbol", placeholder="AAPL", key="hold_ticker").upper()
+        with col2:
+            shares = st.number_input("Shares", min_value=0.01, value=10.0, key="hold_shares")
+        with col3:
+            cost = st.number_input("Cost Basis per Share ($)", min_value=0.01, value=150.0, key="hold_cost")
+        if st.button("Save Holding", type="primary", key="save_hold"):
             if ticker:
-                save_holding(selected, ticker, shares, cost)
+                save_holding(selected_account, ticker, shares, cost)
                 st.cache_data.clear()
-                st.success(f"Saved {ticker}")
+                st.success(f"✅ {ticker} saved!")
                 st.rerun()
 
-    with st.expander("📋 Add Pending Order"):
-        c1, c2 = st.columns(2)
-        with c1:
-            po_tkr = st.text_input("Ticker", key="po_tkr").upper()
-            po_type = st.selectbox("Type", ["Buy", "Sell"], key="po_type")
-        with c2:
-            po_shares = st.number_input("Shares", min_value=0.01, value=10.0, key="po_sh")
-            po_price = st.number_input("Limit Price $", min_value=0.01, value=150.0, key="po_pr")
-        if st.button("Add Pending Order"):
-            if po_tkr:
-                add_pending_order(selected, po_tkr, po_type, po_shares, po_price)
-                st.success("Pending order added")
-                st.rerun()
-
-    df = calculate_portfolio(selected)
-    cash = get_cash_balance(selected)
+    # Portfolio Data
+    portfolio_df = calculate_portfolio(selected_account)
+    cash = get_cash_balance(selected_account)
     
-    # ROBUST total_value calculation - this fixes the ValueError
-    if df is not None and not df.empty and "Current Value" in df.columns:
-        current_value_sum = float(df["Current Value"].sum())
-    else:
-        current_value_sum = 0.0
+    numeric_value = pd.to_numeric(portfolio_df["Current Value"], errors='coerce').fillna(0)
+    numeric_gain = pd.to_numeric(portfolio_df["Unrealized Gain $"], errors='coerce').fillna(0)
+    numeric_return = pd.to_numeric(portfolio_df["Unrealized Gain %"], errors='coerce').fillna(0)
     
-    total_value = current_value_sum + float(cash)
+    total_holdings_value = numeric_value.sum()
+    total_portfolio_value = total_holdings_value + cash
+    total_unrealized_gain = numeric_gain.sum()
+    overall_return_pct = (total_unrealized_gain / (total_holdings_value + 0.0001) * 100) if total_holdings_value > 0 else 0.0
+    num_positions = len(portfolio_df)
+    avg_return_per_position = numeric_return.mean() if num_positions > 0 else 0.0
+    
+    largest_pos_pct = (numeric_value.max() / total_holdings_value * 100) if total_holdings_value > 0 else 0.0
+    cash_pct = (cash / total_portfolio_value * 100) if total_portfolio_value > 0 else 0.0
 
-    st.subheader("📊 Performance Metrics")
-    cols = st.columns(6)
-    with cols[0]: st.metric("Total Value", f"${total_value:,.2f}")
-    with cols[1]: st.metric("Unrealized P/L", f"${df['Unrealized Gain $'].sum():,.2f}" if not df.empty else "$0.00")
-    with cols[2]: st.metric("Avg Return %", f"{df['Unrealized Gain %'].mean():.2f}%" if not df.empty else "0.00%")
-    with cols[3]: st.metric("Positions", len(df))
-    with cols[4]: st.metric("Largest Position %", f"{(df['Current Value'].max() / total_value * 100):.2f}%" if not df.empty and total_value > 0 else "0.00%")
-    with cols[5]: st.metric("Cash %", f"{(cash / total_value * 100):.2f}%" if total_value > 0 else "0.00%")
+    st.subheader("📊 Portfolio Performance Metrics")
+    col1, col2, col3, col4, col5, col6 = st.columns(6)
+    with col1:
+        st.metric("Total Portfolio Value", f"${total_portfolio_value:,.2f}")
+    with col2:
+        st.metric("Total Unrealized P/L", f"${total_unrealized_gain:,.2f}", delta=f"{overall_return_pct:.2f}%")
+    with col3:
+        st.metric("Avg Return per Position", f"{avg_return_per_position:.2f}%")
+    with col4:
+        st.metric("Number of Positions", num_positions)
+    with col5:
+        st.metric("Largest Position", f"{largest_pos_pct:.1f}%")
+    with col6:
+        st.metric("Cash Allocation", f"{cash_pct:.1f}%")
 
     st.divider()
 
-    if not df.empty:
-        st.subheader("Current Holdings + Daily Performance")
-        styled_df = df.style.format({
+    # Holdings Table
+    if not portfolio_df.empty:
+        st.subheader("Current Holdings")
+        styled_df = portfolio_df.style.format({
             "Cost Basis": "${:.2f}",
-            "Current Price": "${:.2f}",
-            "Current Value": "${:.2f}",
-            "Unrealized Gain $": "${:.2f}",
-            "Unrealized Gain %": "{:.2f}%",
-            "Today % Change": "{:.2f}%"
-        }).apply(
-            lambda x: ['color: #00cc00' if isinstance(v, (int, float)) and v > 0 else 
-                       'color: #ff4444' if isinstance(v, (int, float)) and v < 0 else '' for v in x], 
-            subset=['Today % Change']
-        )
+            "Current Price": lambda x: f"${x:.2f}" if isinstance(x, (int, float)) else x,
+            "Current Value": lambda x: f"${x:.2f}" if isinstance(x, (int, float)) else x,
+            "Unrealized Gain $": lambda x: f"${x:.2f}" if isinstance(x, (int, float)) else x,
+            "Unrealized Gain %": lambda x: f"{x:.2f}%" if isinstance(x, (int, float)) else x,
+            "Today % Change": lambda x: f"{x:.2f}%" if isinstance(x, (int, float)) else x
+        })
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
-    if not df.empty:
-        st.subheader("📈 Intraday Charts (1D) with Cost Basis")
-        st.caption("Solid red line = your cost basis per share")
-        cols = st.columns(3)
-        for i, row in df.iterrows():
-            ticker_symbol = row['Ticker']
-            cost_basis = row['Cost Basis']
-            with cols[i % 3]:
-                try:
-                    t = Ticker(ticker_symbol)
-                    hist = t.history(period="1d", interval="5m")
-                    if not hist.empty:
-                        fig = go.Figure()
-                        fig.add_trace(go.Scatter(x=hist.index, y=hist['Close'], mode='lines', line=dict(color='#1f77b4', width=2)))
-                        fig.add_hline(y=cost_basis, line_dash="solid", line_color="red", line_width=2.5,
-                                      annotation_text=f"Cost Basis (${cost_basis:.2f})", annotation_position="top right")
-                        fig.update_layout(title=f"{ticker_symbol} Today", height=300)
-                        st.plotly_chart(fig, use_container_width=True, key=f"chart_{i}")
-                except:
-                    st.info(f"No chart for {ticker_symbol}")
+    # Portfolio Allocation Pie Chart
+    if total_portfolio_value > 0:
+        st.subheader("Portfolio Allocation")
+        alloc_data = portfolio_df[['Ticker', 'Current Value']].copy()
+        alloc_data = alloc_data[pd.to_numeric(alloc_data['Current Value'], errors='coerce').notna()]
+        if not alloc_data.empty:
+            alloc_data.loc[len(alloc_data)] = ['Cash', cash]
+            fig_pie = px.pie(alloc_data, values='Current Value', names='Ticker', 
+                            title="Portfolio Allocation (Including Cash)", hole=0.45)
+            fig_pie.update_traces(textinfo='percent+label')
+            st.plotly_chart(fig_pie, use_container_width=True)
 
-    if total_value > 0:
-        st.subheader("Allocation Charts")
-        c1, c2 = st.columns(2)
-        with c1:
-            pie_data = df[['Ticker', 'Current Value']].copy() if not df.empty else pd.DataFrame(columns=['Ticker', 'Current Value'])
-            pie_data = pie_data.copy()
-            pie_data.loc[len(pie_data)] = ['Cash', cash]
-            st.plotly_chart(px.pie(pie_data, values='Current Value', names='Ticker', title="Portfolio Allocation (Including Cash)", hole=0.45), use_container_width=True)
-        with c2:
-            if not df.empty:
-                sector_df = df.groupby('Sector')['Current Value'].sum().reset_index()
-                sector_df['Percentage'] = (sector_df['Current Value'] / df['Current Value'].sum() * 100)
-            else:
-                sector_df = pd.DataFrame(columns=['Sector', 'Current Value', 'Percentage'])
-            sector_df.loc[len(sector_df)] = ['Cash', cash, (cash / total_value * 100) if total_value > 0 else 0]
-            sector_df = sector_df.sort_values('Percentage', ascending=False)
-            fig_sector = px.bar(sector_df, x='Percentage', y='Sector', orientation='h', title="Sector Allocation (%)", text='Percentage', color='Percentage', color_continuous_scale='Blues')
-            fig_sector.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
-            st.plotly_chart(fig_sector, use_container_width=True)
+    # Sector Allocation Bar Chart
+    if not portfolio_df.empty and total_holdings_value > 0:
+        st.subheader("Sector Allocation (%)")
+        sector_df = portfolio_df.groupby('Sector')['Current Value'].sum().reset_index()
+        sector_df['Percentage'] = (sector_df['Current Value'] / total_holdings_value * 100)
+        sector_df.loc[len(sector_df)] = ['Cash', cash, (cash / total_portfolio_value * 100) if total_portfolio_value > 0 else 0]
+        sector_df = sector_df.sort_values('Percentage', ascending=False)
+        
+        fig_sector = px.bar(
+            sector_df, 
+            x='Percentage', 
+            y='Sector', 
+            orientation='h',
+            title="Allocation by Sector (%)",
+            text='Percentage',
+            color='Percentage',
+            color_continuous_scale='Blues'
+        )
+        fig_sector.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+        fig_sector.update_layout(xaxis_title="Percentage of Total Portfolio (%)")
+        st.plotly_chart(fig_sector, use_container_width=True)
 
-    pending = load_pending_orders(selected)
-    if not pending.empty:
-        st.subheader("📋 Pending Orders")
-        for _, row in pending.iterrows():
-            col1, col2, col3 = st.columns([5, 2, 1])
-            with col1:
-                st.write(f"**{row['ticker']}** — {row['order_type']} {row['shares']:.2f} shares @ **${row['limit_price']:.2f}**")
-            with col3:
-                if st.button("🗑️", key=f"del_po_{row['id']}"):
-                    delete_pending_order(row['id'])
-                    st.rerun()
+    st.info(f"💰 Available Cash: ${cash:,.2f}")
 
-    st.info(f"Available Cash: **${cash:,.2f}**")
-
-st.caption("Built with Streamlit + yfinance + Grok API")
+st.caption("Built with Streamlit + yfinance + Grok API • Educational use only")
