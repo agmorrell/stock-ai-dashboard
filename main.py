@@ -232,7 +232,6 @@ Be detailed, specific, and actionable. Use clear headings and bullet points."""
     with st.spinner(f"Generating full analysis for {selected_account}..."):
         main_analysis = call_grok(prompt)
 
-        # Weekly Action Plan (starts from Monday)
         weekly_prompt = f"""Based on the full analysis you just provided, create a clean and practical **Weekly Action Plan**.
 
 Use this exact structure:
@@ -264,7 +263,6 @@ Include monitoring tasks and any stop-loss adjustments. Make it realistic for a 
                 {"role": "assistant", "content": main_analysis}
             ])
 
-        # Combine both
         full_result = main_analysis + "\n\n---\n\n" + weekly_plan
 
         st.session_state.full_analysis = full_result
@@ -420,8 +418,10 @@ with tab2:
   
     st.divider()
   
+    # Current Holdings with Delete Buttons
     if not portfolio_df.empty:
         st.subheader("Current Holdings + Daily Performance")
+        
         display_df = portfolio_df.copy()
         styled_df = display_df.style.format({
             "Cost Basis": "${:.2f}",
@@ -446,8 +446,20 @@ with tab2:
             return ''
         
         styled_df = styled_df.map(highlight_change, subset=['Today % Change'])
-        st.dataframe(styled_df, use_container_width=True, hide_index=True)
+        
+        # Display table with delete buttons
+        for idx, row in portfolio_df.iterrows():
+            col1, col2 = st.columns([9, 1])
+            with col1:
+                st.dataframe(styled_df.iloc[[idx]], use_container_width=True, hide_index=True)
+            with col2:
+                if st.button("🗑️", key=f"del_hold_{selected_account}_{row['Ticker']}"):
+                    delete_holding(selected_account, row['Ticker'])
+                    st.cache_data.clear()
+                    st.success(f"Deleted {row['Ticker']}")
+                    st.rerun()
 
+    # Pending Orders
     pending = load_pending_orders(selected_account)
     if not pending.empty:
         st.subheader("📋 Pending Orders")
@@ -499,7 +511,27 @@ with tab2:
                 except:
                     st.info(f"No intraday chart available for {ticker_symbol}")
 
-    # Allocation
+    # Sector Allocation Bar Chart (Restored)
+    if not portfolio_df.empty and total_holdings_value > 0:
+        st.subheader("Sector Allocation (%)")
+        sector_df = portfolio_df.groupby('Sector')['Current Value'].sum().reset_index()
+        sector_df['Percentage'] = (sector_df['Current Value'] / total_holdings_value * 100)
+        sector_df.loc[len(sector_df)] = ['Cash', cash, (cash / total_portfolio_value * 100) if total_portfolio_value > 0 else 0]
+        sector_df = sector_df.sort_values('Percentage', ascending=False)
+      
+        fig_sector = px.bar(
+            sector_df, 
+            x='Percentage', 
+            y='Sector', 
+            orientation='h',
+            title="Allocation by Sector (%)", 
+            text='Percentage',
+            color='Percentage', 
+            color_continuous_scale='Blues'
+        )
+        fig_sector.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+        st.plotly_chart(fig_sector, use_container_width=True)
+
     if total_portfolio_value > 0:
         st.subheader("Portfolio Allocation")
         alloc_data = portfolio_df[['Ticker', 'Current Value']].copy() if not portfolio_df.empty else pd.DataFrame(columns=['Ticker', 'Current Value'])
