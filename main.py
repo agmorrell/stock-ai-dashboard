@@ -18,7 +18,7 @@ st.set_page_config(page_title="AI Stock Dashboard", layout="wide")
 st.title("🚀 My Personal AI Stock Dashboard")
 st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M %p EST')}")
 
-# Consistent font and spacing CSS
+# Clean CSS
 st.markdown("""
     <style>
     .stMarkdown, .stMarkdown p, .stMarkdown li {
@@ -72,12 +72,11 @@ def clean_analysis_text(text):
     text = re.sub(r'(\w{12,})([A-Z])', r'\1 \2', text)
     return text
 
-# Parse 5 Day Trading Setups into a clean table
+# Parse 5 Day Trading Setups into table
 def parse_trading_setups(text):
     setups = []
     lines = text.split('\n')
     current = None
-    
     for line in lines:
         line = line.strip()
         if not line:
@@ -100,10 +99,8 @@ def parse_trading_setups(text):
                 current["Target"] = re.sub(r'Target[:\s]*', '', line, flags=re.IGNORECASE).strip()
             elif "catalyst" in lower:
                 current["Catalyst"] = re.sub(r'Catalyst[:\s]*', '', line, flags=re.IGNORECASE).strip()
-    
     if current:
         setups.append(current)
-    
     return pd.DataFrame(setups) if setups else None
 
 # ----------------- DATABASE -----------------
@@ -165,7 +162,7 @@ def load_holdings(account_name):
 def save_holding(account_name, ticker, shares, cost_basis):
     conn = get_db_connection()
     conn.execute("INSERT OR REPLACE INTO holdings (account_name, ticker, shares, cost_basis) VALUES (?, ?, ?, ?)",
-                 (account_name, ticker.upper(), shares, cost_basis))
+                 (account_name, ticker.upper(), float(shares), float(cost_basis)))
     conn.commit()
     conn.close()
 
@@ -179,18 +176,18 @@ def get_cash_balance(account_name):
     conn = get_db_connection()
     row = conn.execute("SELECT cash FROM cash_balance WHERE account_name = ?", (account_name,)).fetchone()
     conn.close()
-    return row['cash'] if row else 0.0
+    return float(row['cash']) if row else 0.0
 
 def update_cash_balance(account_name, new_cash):
     conn = get_db_connection()
-    conn.execute("REPLACE INTO cash_balance (account_name, cash) VALUES (?, ?)", (account_name, new_cash))
+    conn.execute("REPLACE INTO cash_balance (account_name, cash) VALUES (?, ?)", (account_name, float(new_cash)))
     conn.commit()
     conn.close()
 
 def add_pending_order(account_name, ticker, order_type, shares, limit_price):
     conn = get_db_connection()
     conn.execute("""INSERT INTO pending_orders (account_name, ticker, order_type, shares, limit_price) 
-                    VALUES (?, ?, ?, ?, ?)""", (account_name, ticker.upper(), order_type, shares, limit_price))
+                    VALUES (?, ?, ?, ?, ?)""", (account_name, ticker.upper(), order_type, float(shares), float(limit_price)))
     conn.commit()
     conn.close()
 
@@ -324,8 +321,6 @@ with tab1:
     st.header("Full Daily Market + Portfolio Analysis")
     if "full_analysis" in st.session_state:
         full_text = st.session_state.full_analysis
-        
-        # Split and render sections
         parts = re.split(r'(?m)^(#{1,3}\s|5 Day Trading Setups)', full_text)
         for part in parts:
             if not part or not part.strip():
@@ -365,7 +360,7 @@ with tab1:
                 st.markdown("**Grok:**")
                 st.markdown(cleaned_resp)
     else:
-        st.info("Click 'Run Full Daily Analysis' in sidebar to generate today's report.")
+        st.info("Click 'Run Full Daily Analysis' in sidebar.")
 
 with tab2:
     st.header("💼 My Portfolio")
@@ -396,7 +391,7 @@ with tab2:
     st.divider()
 
     cash = get_cash_balance(selected)
-    new_cash = st.number_input("Cash Balance ($)", value=cash, step=100.0)
+    new_cash = st.number_input("Cash Balance ($)", value=float(cash), step=100.0)
     if st.button("Update Cash"):
         update_cash_balance(selected, new_cash)
         st.success("Cash updated")
@@ -432,7 +427,10 @@ with tab2:
 
     df = calculate_portfolio(selected)
     cash = get_cash_balance(selected)
-    total_value = (df["Current Value"].sum() if not df.empty else 0) + cash
+    
+    # FIXED: Safe total_value calculation
+    current_value_sum = float(df["Current Value"].sum()) if not df.empty and "Current Value" in df.columns else 0.0
+    total_value = current_value_sum + float(cash)
 
     st.subheader("📊 Performance Metrics")
     cols = st.columns(6)
@@ -486,13 +484,18 @@ with tab2:
         st.subheader("Allocation Charts")
         c1, c2 = st.columns(2)
         with c1:
-            pie_data = df[['Ticker', 'Current Value']].copy()
+            pie_data = df[['Ticker', 'Current Value']].copy() if not df.empty else pd.DataFrame()
+            if not pie_data.empty:
+                pie_data = pie_data.copy()
             pie_data.loc[len(pie_data)] = ['Cash', cash]
             st.plotly_chart(px.pie(pie_data, values='Current Value', names='Ticker', title="Portfolio Allocation (Including Cash)", hole=0.45), use_container_width=True)
         with c2:
-            sector_df = df.groupby('Sector')['Current Value'].sum().reset_index()
-            sector_df['Percentage'] = (sector_df['Current Value'] / df['Current Value'].sum() * 100) if not df.empty else 0
-            sector_df.loc[len(sector_df)] = ['Cash', cash, (cash / total_value * 100)]
+            if not df.empty:
+                sector_df = df.groupby('Sector')['Current Value'].sum().reset_index()
+                sector_df['Percentage'] = (sector_df['Current Value'] / df['Current Value'].sum() * 100)
+            else:
+                sector_df = pd.DataFrame()
+            sector_df.loc[len(sector_df)] = ['Cash', cash, (cash / total_value * 100) if total_value > 0 else 0]
             sector_df = sector_df.sort_values('Percentage', ascending=False)
             fig_sector = px.bar(sector_df, x='Percentage', y='Sector', orientation='h', title="Sector Allocation (%)", text='Percentage', color='Percentage', color_continuous_scale='Blues')
             fig_sector.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
