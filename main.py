@@ -58,35 +58,40 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Stronger text cleaner specifically for dense trading language
+# **Very aggressive text cleaner** for Grok's dense output
 def clean_analysis_text(text):
     if not text:
         return text
     
-    # 1. Add space after punctuation when missing
+    # 1. Basic punctuation spacing
     text = re.sub(r'([a-zA-Z0-9)])([.,;:/])([a-zA-Z])', r'\1\2 \3', text)
     
-    # 2. Add space before/after numbers and letters
+    # 2. Number/letter spacing
     text = re.sub(r'([a-zA-Z)])([0-9])', r'\1 \2', text)
     text = re.sub(r'([0-9])([a-zA-Z(])', r'\1 \2', text)
     
-    # 3. Fix common run-together trading phrases
-    text = re.sub(r'(\w+)(hold|add|buy|sell|trim|deploy|momentum|squeeze|play|catalyst|explorer|positions|drypowder)', r'\1 \2', text, flags=re.IGNORECASE)
+    # 3. Common trading word run-ons
+    text = re.sub(r'(\w+)(hold|add|buy|sell|trim|deploy|momentum|squeeze|play|catalyst|explorer|positions|drypowder|into|new)', r'\1 \2', text, flags=re.IGNORECASE)
+    
+    # 4. Cash/holdings related
     text = re.sub(r'(cash|holdings|positions|shares)([0-9])', r'\1 \2', text, flags=re.IGNORECASE)
     text = re.sub(r'([0-9])(K|k)', r'\1 \2', text)
     
-    # 4. Fix slashes, dashes, and parentheses
+    # 5. Slashes, dashes, parentheses
     text = re.sub(r'([a-zA-Z0-9)])([/\-])([a-zA-Z0-9(])', r'\1 \2 \3', text)
     text = re.sub(r'\)([a-zA-Z0-9])', r') \1', text)
     text = re.sub(r'([a-zA-Z0-9])\(', r'\1 (', text)
     
-    # 5. Fix specific patterns like "70−80", "3,000)into", "Thu.Momentum"
-    text = re.sub(r'([0-9])−([0-9])', r'\1 - \2', text)
-    text = re.sub(r'([0-9,]+)\)([a-zA-Z])', r'\1) \2', text)
+    # 6. Specific patterns you reported
     text = re.sub(r'([A-Za-z]{3})\.([A-Za-z])', r'\1. \2', text)
-    
-    # 6. Final cleanup for commas followed by capital letters
+    text = re.sub(r'([0-9])−([0-9])', r'\1 - \2', text)
     text = re.sub(r'([a-z0-9]),([A-Z])', r'\1, \2', text)
+    
+    # 7. Final aggressive pass - force space before capital letters after lowercase or number
+    text = re.sub(r'([a-z0-9)])([A-Z])', r'\1 \2', text)
+    
+    # 8. Extra cleanup for repeated patterns
+    text = re.sub(r'(\w{10,})([A-Z])', r'\1 \2', text)  # Long words followed by capital
     
     return text
 
@@ -295,11 +300,11 @@ def clean_analysis_text(text):
     if not text:
         return text
     
-    # Multiple aggressive cleaning passes
+    # Extremely aggressive cleaning for your specific issues
     text = re.sub(r'([a-zA-Z0-9)])([.,;:/])([a-zA-Z])', r'\1\2 \3', text)
     text = re.sub(r'([a-zA-Z)])([0-9])', r'\1 \2', text)
     text = re.sub(r'([0-9])([a-zA-Z(])', r'\1 \2', text)
-    text = re.sub(r'(\w+)(hold|add|buy|sell|trim|deploy|momentum|squeeze|play|catalyst|explorer|positions|drypowder)', r'\1 \2', text, flags=re.IGNORECASE)
+    text = re.sub(r'(\w+)(hold|add|buy|sell|trim|deploy|momentum|squeeze|play|catalyst|explorer|positions|drypowder|into|new)', r'\1 \2', text, flags=re.IGNORECASE)
     text = re.sub(r'(cash|holdings|positions|shares)([0-9])', r'\1 \2', text, flags=re.IGNORECASE)
     text = re.sub(r'([0-9])(K|k)', r'\1 \2', text)
     text = re.sub(r'([a-zA-Z0-9)])([/\-])([a-zA-Z0-9(])', r'\1 \2 \3', text)
@@ -308,11 +313,76 @@ def clean_analysis_text(text):
     text = re.sub(r'([A-Za-z]{3})\.([A-Za-z])', r'\1. \2', text)
     text = re.sub(r'([0-9])−([0-9])', r'\1 - \2', text)
     text = re.sub(r'([a-z0-9]),([A-Z])', r'\1, \2', text)
-    
-    # Final safety net - add space before capital letters after lowercase/number
     text = re.sub(r'([a-z0-9)])([A-Z])', r'\1 \2', text)
     
+    # Extra aggressive pass for very long run-on strings
+    text = re.sub(r'(\w{8,})([A-Z])', r'\1 \2', text)
+    text = re.sub(r'([0-9,]+)\)([a-zA-Z])', r'\1) \2', text)
+    
     return text
+
+# ----------------- GROK API -----------------
+def call_grok(prompt, history=None):
+    api_key = os.environ.get("GROK_API_KEY")
+    if not api_key:
+        return "❌ Grok API key not found."
+    
+    messages = history or []
+    messages.append({"role": "user", "content": prompt})
+    
+    try:
+        response = requests.post(
+            "https://api.x.ai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={"model": "grok-4.1-fast-reasoning", "messages": messages, "temperature": 0.7, "max_tokens": 7000},
+            timeout=120
+        )
+        if response.status_code != 200:
+            return f"❌ API Error {response.status_code}"
+        return response.json()['choices'][0]['message']['content']
+    except Exception as e:
+        return f"❌ Request Error: {str(e)}"
+
+# ----------------- FULL ANALYSIS -----------------
+def run_full_analysis(selected_account):
+    today = datetime.now().strftime("%B %d, %Y")
+    portfolio_df = calculate_portfolio(selected_account)
+    cash = get_cash_balance(selected_account)
+    risk = get_risk_tolerance(selected_account)
+    pending_df = load_pending_orders(selected_account)
+    
+    prompt = f"""You are a professional market analyst with **{risk.lower()} risk tolerance**. Date: {today}.
+
+Portfolio ({selected_account}):
+Cash: ${cash:,.2f}
+Holdings:\n{portfolio_df.to_string(index=False) if not portfolio_df.empty else "None"}
+Pending Orders:\n{pending_df.to_string(index=False) if not pending_df.empty else "None"}
+
+**Part 1: Market Overview**
+- Highest short-term momentum sectors + why
+- 10-stock watchlist with volatility/volume/catalysts
+- 5 day trading setups (entry, stop, target)
+- Capital management strategy
+- Upcoming catalysts this week
+
+**Part 2: Personalized Recommendations**
+For every holding and new ideas:
+- Clear **Buy/Sell/Hold/Trim/Add** with specific share amounts or % of cash
+- Entry/exit zones or triggers
+- Reasoning tied to momentum
+- Risk level and stop-loss ideas
+
+Be detailed, specific, and actionable. Use headings and bullets."""
+
+    with st.spinner("Generating full analysis..."):
+        raw_result = call_grok(prompt)
+        cleaned_result = clean_analysis_text(raw_result)
+        st.session_state.full_analysis = cleaned_result
+        st.session_state.conversation_history = [
+            {"role": "user", "content": prompt},
+            {"role": "assistant", "content": cleaned_result}
+        ]
+        return cleaned_result
 
 # ----------------- SIDEBAR -----------------
 with st.sidebar:
