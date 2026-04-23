@@ -194,7 +194,7 @@ def call_grok(prompt, conversation_history=None):
     except Exception as e:
         return f"❌ Request Error: {str(e)}"
 
-# ----------------- FULL ANALYSIS WITH WEEKLY PLAN -----------------
+# ----------------- FULL ANALYSIS WITH YOUR EXACT PROMPT + FRESH PRICES -----------------
 def run_full_analysis(selected_account):
     today = datetime.now().strftime("%B %d, %Y")
     portfolio_df = calculate_portfolio(selected_account)
@@ -202,10 +202,20 @@ def run_full_analysis(selected_account):
     risk_tolerance = get_risk_tolerance(selected_account)
     pending_df = load_pending_orders(selected_account)
   
+    # Fresh price snapshot to prevent hallucinations
+    price_snapshot = ""
+    if not portfolio_df.empty:
+        price_snapshot = "\n**CURRENT REAL-TIME PRICES (USE THESE EXACT NUMBERS ONLY):**\n"
+        for _, row in portfolio_df.iterrows():
+            price_snapshot += f"- {row['Ticker']}: Current Price = ${row['Current Price']}\n"
+
     portfolio_text = portfolio_df.to_string(index=False) if not portfolio_df.empty else "No holdings yet."
     pending_text = pending_df.to_string(index=False) if not pending_df.empty else "No pending orders."
   
     prompt = f"""You are a professional market analyst and portfolio manager with a **{risk_tolerance.lower()} risk tolerance**. Today's date is {today}.
+
+{price_snapshot}
+
 Current Portfolio Snapshot (Account: {selected_account}):
 Cash Available: ${cash:,.2f}
 Holdings:
@@ -220,7 +230,6 @@ Pending Orders:
 4. Suggest a capital management strategy suitable for {risk_tolerance.lower()} risk tolerance.
 5. List upcoming earnings, macro events, or news catalysts this week.
 
-**Part 2: Personalized Recommendations**
 For each existing holding and new opportunities list as bullets:
 - Give a clear **Buy / Sell / Hold / Trim / Add** recommendation with specific share amounts, cost basis, or % of cash.
 - Suggest entry/exit zones or triggers.
@@ -229,11 +238,12 @@ For each existing holding and new opportunities list as bullets:
 - New portfolio share count after recommendation.
 - Summarize in a table.
 
-Be detailed, specific, and actionable. Use clear headings and bullet points."""
+Be detailed, specific, and actionable. Use clear headings and bullet points. Base all price-related recommendations strictly on the CURRENT REAL-TIME PRICES provided above."""
 
     with st.spinner(f"Generating full analysis for {selected_account}..."):
         main_analysis = call_grok(prompt)
 
+        # Weekly Action Plan
         weekly_prompt = f"""Based on the full analysis you just provided, create a clean and practical **Weekly Action Plan**.
 
 Use this exact structure:
@@ -241,8 +251,7 @@ Use this exact structure:
 **📅 Weekly Action Plan**
 
 **Monday:**
-- Specific actions, tickers, share amounts or % of cash
-- What to watch (levels, news, etc.)
+- ...
 
 **Tuesday:**
 - ...
@@ -256,7 +265,7 @@ Use this exact structure:
 **Friday:**
 - ...
 
-Focus on high-priority moves, risk management, and following through on the recommendations. Summarize by day in a table. """
+Focus on high-priority moves, risk management, and following through on the recommendations."""
 
         with st.spinner("Creating Weekly Action Plan..."):
             weekly_plan = call_grok(weekly_prompt, [
@@ -419,11 +428,10 @@ with tab2:
   
     st.divider()
 
-    # ==================== FIXED CURRENT HOLDINGS SECTION ====================
+    # Current Holdings
     if not portfolio_df.empty:
         st.subheader("Current Holdings + Daily Performance")
         
-        # Create styled dataframe once
         styled_df = portfolio_df.style.format({
             "Cost Basis": "${:.2f}",
             "Current Price": "${:.2f}",
@@ -448,10 +456,8 @@ with tab2:
         
         styled_df = styled_df.map(highlight_change, subset=['Today % Change'])
         
-        # Display the full table
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
         
-        # Delete buttons (safe and simple)
         st.write("**Delete Holdings**")
         delete_cols = st.columns(min(4, len(portfolio_df)))
         for i, row in portfolio_df.iterrows():
@@ -515,7 +521,7 @@ with tab2:
                 except:
                     st.info(f"No intraday chart available for {ticker_symbol}")
 
-    # Sector Allocation Bar Chart
+    # Sector Allocation
     if not portfolio_df.empty and total_holdings_value > 0:
         st.subheader("Sector Allocation (%)")
         sector_df = portfolio_df.groupby('Sector')['Current Value'].sum().reset_index()
@@ -524,19 +530,13 @@ with tab2:
         sector_df = sector_df.sort_values('Percentage', ascending=False)
       
         fig_sector = px.bar(
-            sector_df, 
-            x='Percentage', 
-            y='Sector', 
-            orientation='h',
-            title="Allocation by Sector (%)", 
-            text='Percentage',
-            color='Percentage', 
-            color_continuous_scale='Blues'
+            sector_df, x='Percentage', y='Sector', orientation='h',
+            title="Allocation by Sector (%)", text='Percentage',
+            color='Percentage', color_continuous_scale='Blues'
         )
         fig_sector.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
         st.plotly_chart(fig_sector, use_container_width=True)
 
-    # Portfolio Pie Chart
     if total_portfolio_value > 0:
         st.subheader("Portfolio Allocation")
         alloc_data = portfolio_df[['Ticker', 'Current Value']].copy() if not portfolio_df.empty else pd.DataFrame(columns=['Ticker', 'Current Value'])
