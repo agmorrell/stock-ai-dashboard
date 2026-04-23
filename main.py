@@ -415,7 +415,7 @@ with tab2:
         )
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
    
-    # Pending Orders (restored)
+    # PENDING ORDERS SECTION - now properly placed and restored
     pending = load_pending_orders(selected_account)
     if not pending.empty:
         st.subheader("📋 Pending Orders")
@@ -424,11 +424,28 @@ with tab2:
             with col1:
                 st.write(f"**{row['ticker']}** — {row['order_type']} {row['shares']:.2f} shares @ **${row['limit_price']:.2f}**")
             with col3:
-                if st.button("🗑️", key=f"del_po_{row['id']}"):
+                if st.button("🗑️ Delete", key=f"del_po_{row['id']}"):
                     delete_pending_order(row['id'])
                     st.rerun()
+    else:
+        st.info("No pending orders yet. Add one using the expander below.")
    
-    # Intraday Charts with red cost basis line (restored)
+    # Add Pending Order expander
+    with st.expander("📋 Add Pending Order"):
+        c1, c2 = st.columns(2)
+        with c1:
+            po_tkr = st.text_input("Ticker", key="po_tkr").upper()
+            po_type = st.selectbox("Type", ["Buy", "Sell"], key="po_type")
+        with c2:
+            po_shares = st.number_input("Shares", min_value=0.01, value=10.0, key="po_sh")
+            po_price = st.number_input("Limit Price $", min_value=0.01, value=150.0, key="po_pr")
+        if st.button("Add Pending Order", key="add_po"):
+            if po_tkr:
+                add_pending_order(selected_account, po_tkr, po_type, po_shares, po_price)
+                st.success("Pending order added")
+                st.rerun()
+   
+    # Intraday Charts with red cost basis line
     if not portfolio_df.empty:
         st.subheader("📈 Intraday Charts (1D) with Cost Basis")
         st.caption("Solid red line = your cost basis per share")
