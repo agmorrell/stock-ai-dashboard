@@ -334,7 +334,7 @@ def call_grok(prompt, history=None):
         response = requests.post(
             "https://api.x.ai/v1/chat/completions",
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={"model": "grok-4.1-fast-reasoning", "messages": messages, "temperature": 0.7, "max_tokens": 7000},
+            json={"model": "grok-4-1-fast-reasoning", "messages": messages, "temperature": 0.7, "max_tokens": 7000},
             timeout=120
         )
         if response.status_code != 200:
