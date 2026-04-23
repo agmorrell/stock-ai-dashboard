@@ -396,21 +396,37 @@ with tab2:
   
     st.divider()
   
-    # Holdings Table
+        # Holdings Table with colored Today % Change - FIXED
     if not portfolio_df.empty:
         st.subheader("Current Holdings + Daily Performance")
-        styled_df = portfolio_df.style.format({
+        
+        # Create a copy to avoid modifying the original cached dataframe
+        display_df = portfolio_df.copy()
+        
+        # Safe formatting using a simple dictionary (avoid complex lambdas)
+        styled_df = display_df.style.format({
             "Cost Basis": "${:.2f}",
             "Current Price": "${:.2f}",
             "Current Value": "${:.2f}",
             "Unrealized Gain $": "${:.2f}",
             "Unrealized Gain %": "{:.2f}%",
             "Today % Change": "{:.2f}%"
-        }).apply(
-            lambda x: ['color: #00cc00' if isinstance(v, (int, float)) and v > 0 else
-                       'color: #ff4444' if isinstance(v, (int, float)) and v < 0 else '' for v in x],
-            subset=['Today % Change']
-        )
+        }, na_rep="N/A")   # This handles any remaining "N/A" safely
+        
+        # Conditional coloring ONLY on Today % Change (much more stable)
+        def color_today_change(val):
+            try:
+                if isinstance(val, (int, float)):
+                    if val > 0:
+                        return 'color: #00cc00'
+                    elif val < 0:
+                        return 'color: #ff4444'
+            except:
+                pass
+            return ''   # default (black/gray)
+        
+        styled_df = styled_df.applymap(color_today_change, subset=['Today % Change'])
+        
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
   
     # Pending Orders
