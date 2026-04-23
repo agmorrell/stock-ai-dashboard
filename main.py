@@ -58,12 +58,12 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Highly refined aggressive cleaner for trading text
+# Highly refined aggressive cleaner for trading setups
 def clean_analysis_text(text):
     if not text:
         return text
     
-    # 1. Basic punctuation spacing
+    # 1. Basic punctuation
     text = re.sub(r'([a-zA-Z0-9)])([.,;:/])([a-zA-Z])', r'\1\2 \3', text)
     
     # 2. Number/letter separation
@@ -82,21 +82,17 @@ def clean_analysis_text(text):
     text = re.sub(r'([a-zA-Z0-9])\(', r'\1 (', text)
     text = re.sub(r'([0-9,]+)\)([a-zA-Z])', r'\1) \2', text)
     
-    # 6. Specific patterns from your examples
-    text = re.sub(r'([0-9.])([A-Za-z])', r'\1 \2', text)
-    text = re.sub(r'([A-Za-z])([0-9.])', r'\1 \2', text)
-    text = re.sub(r'([a-z0-9)])([A-Z])', r'\1 \2', text)
-    text = re.sub(r'([0-9,]+)\)([a-z])', r'\1) \2', text, flags=re.IGNORECASE)
-    text = re.sub(r'(\w+)\+\s*([0-9])', r'\1 + \2', text)
-    
-    # 7. Final aggressive passes
-    text = re.sub(r'(\w{10,})([A-Z])', r'\1 \2', text)
-    text = re.sub(r'([0-9.])([A-Z])', r'\1 \2', text)
-    text = re.sub(r'([a-z0-9)])([A-Z])', r'\1 \2', text)
-    
-    # 8. Extra cleanup for very dense strings
+    # 6. Specific patterns from your latest examples
+    text = re.sub(r'([0-9.])\+([a-zA-Z])', r'\1 + \2', text)
+    text = re.sub(r'([0-9.])(onVWAP|gap−up|pullbackto|post−datapop)', r'\1 \2', text, flags=re.IGNORECASE)
+    text = re.sub(r'(today′s|pre|post)([0-9])', r'\1 \2', text, flags=re.IGNORECASE)
     text = re.sub(r'([0-9,]+)([A-Za-z])', r'\1 \2', text)
     text = re.sub(r'([A-Za-z])([0-9,]+)', r'\1 \2', text)
+    
+    # 7. Final aggressive passes
+    text = re.sub(r'([a-z0-9)])([A-Z])', r'\1 \2', text)
+    text = re.sub(r'(\w{10,})([A-Z])', r'\1 \2', text)
+    text = re.sub(r'([0-9.])([A-Z])', r'\1 \2', text)
     
     return text
 
