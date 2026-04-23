@@ -194,11 +194,9 @@ def call_grok(prompt, conversation_history=None):
     except Exception as e:
         return f"❌ Request Error: {str(e)}"
 
-# ----------------- FULL ANALYSIS WITH WEEKLY PLAN (Updated) -----------------
+# ----------------- FULL ANALYSIS WITH WEEKLY PLAN -----------------
 def run_full_analysis(selected_account):
-    today_str = datetime.now().strftime("%B %d, %Y")
-    current_day = datetime.now().strftime("%A")   # e.g., "Thursday"
-    
+    today = datetime.now().strftime("%B %d, %Y")
     portfolio_df = calculate_portfolio(selected_account)
     cash = get_cash_balance(selected_account)
     risk_tolerance = get_risk_tolerance(selected_account)
@@ -207,7 +205,7 @@ def run_full_analysis(selected_account):
     portfolio_text = portfolio_df.to_string(index=False) if not portfolio_df.empty else "No holdings yet."
     pending_text = pending_df.to_string(index=False) if not pending_df.empty else "No pending orders."
   
-    prompt = f"""You are a professional market analyst and portfolio manager with a **{risk_tolerance.lower()} risk tolerance**. Today's date is {today_str}.
+    prompt = f"""You are a professional market analyst and portfolio manager with a **{risk_tolerance.lower()} risk tolerance**. Today's date is {today}.
 Current Portfolio Snapshot (Account: {selected_account}):
 Cash Available: ${cash:,.2f}
 Holdings:
@@ -229,48 +227,49 @@ For each existing holding and new opportunities:
 - Provide reasoning tied to momentum and risk.
 - Assign risk level and stop-loss ideas.
 
-Be detailed, specific, and actionable."""
+Be detailed, specific, and actionable. Use clear headings and bullet points."""
 
     with st.spinner(f"Generating full analysis for {selected_account}..."):
         main_analysis = call_grok(prompt)
 
-        # Updated Weekly Action Plan - Starts from TODAY
-        weekly_prompt = f"""Today is {current_day}, {today_str}. The user has already started some trades this week.
+        # Weekly Action Plan (starts from Monday)
+        weekly_prompt = f"""Based on the full analysis you just provided, create a clean and practical **Weekly Action Plan**.
 
-Using the analysis you just provided, create a **practical Weekly Action Plan** starting from **today ({current_day})**.
-
-Structure it like this:
+Use this exact structure:
 
 **📅 Weekly Action Plan**
 
-**This Week ({current_day} onward):**
-- **{current_day}:** [Immediate actions, follow-ups on trades already started, monitoring]
-- **Friday:** [Actions for the end of this week]
+**Monday:**
+- Specific actions, tickers, share amounts or % of cash
+- What to watch (levels, news, etc.)
 
-**Next Week:**
-- **Monday:**
-- **Tuesday:**
-- **Wednesday:**
-- **Thursday:**
-- **Friday:**
+**Tuesday:**
+- ...
 
-For each day, include:
-- Specific actions (Buy, Sell, Trim, Add, Monitor, Rebalance, adjust stops)
-- Which tickers and approximate share amounts or % of cash
-- Key levels, earnings, or events to watch
-- Risk management steps
+**Wednesday:**
+- ...
 
-Keep it realistic, actionable, and directly connected to the recommendations and any trades already in progress."""
+**Thursday:**
+- ...
 
-        with st.spinner("Building your Weekly Action Plan starting from today..."):
+**Friday:**
+- ...
+
+Focus on high-priority moves, risk management, and following through on the recommendations. 
+Include monitoring tasks and any stop-loss adjustments. Make it realistic for a {risk_tolerance.lower()} risk tolerance investor."""
+
+        with st.spinner("Creating Weekly Action Plan..."):
             weekly_plan = call_grok(weekly_prompt, [
                 {"role": "user", "content": prompt},
                 {"role": "assistant", "content": main_analysis}
             ])
 
+        # Combine both
         full_result = main_analysis + "\n\n---\n\n" + weekly_plan
 
         st.session_state.full_analysis = full_result
+        if "conversation_history" not in st.session_state:
+            st.session_state.conversation_history = []
         st.session_state.conversation_history = [
             {"role": "user", "content": prompt},
             {"role": "assistant", "content": full_result}
@@ -283,7 +282,7 @@ with st.sidebar:
     if st.button("🔥 Run Full Daily Analysis", type="primary"):
         if "current_account" in st.session_state:
             run_full_analysis(st.session_state.current_account)
-            st.success("✅ Full analysis + Weekly Plan (starting today) ready!")
+            st.success("✅ Full analysis + Weekly Action Plan ready!")
         else:
             st.error("Please select an account first.")
     if st.button("🔄 Refresh Portfolio Prices"):
@@ -449,7 +448,6 @@ with tab2:
         styled_df = styled_df.map(highlight_change, subset=['Today % Change'])
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
-    # Pending Orders and rest of tab2 (unchanged)
     pending = load_pending_orders(selected_account)
     if not pending.empty:
         st.subheader("📋 Pending Orders")
@@ -478,8 +476,30 @@ with tab2:
                 st.success("Pending order added")
                 st.rerun()
 
-    # Intraday Charts and Allocation (unchanged - keep your original code here if you want)
+    # Intraday Charts
+    if not portfolio_df.empty:
+        st.subheader("📈 Intraday Charts (1D) with Cost Basis")
+        st.caption("Solid red line = your cost basis per share")
+        cols = st.columns(3)
+        for i, row in portfolio_df.iterrows():
+            ticker_symbol = row['Ticker']
+            cost_basis = row['Cost Basis']
+            with cols[i % 3]:
+                try:
+                    t = Ticker(ticker_symbol)
+                    hist = t.history(period="1d", interval="5m")
+                    if not hist.empty:
+                        fig = go.Figure()
+                        fig.add_trace(go.Scatter(x=hist.index, y=hist['Close'], mode='lines', 
+                                               line=dict(color='#1f77b4', width=2)))
+                        fig.add_hline(y=cost_basis, line_dash="solid", line_color="red", line_width=2.5,
+                                      annotation_text=f"Cost Basis (${cost_basis:.2f})", annotation_position="top right")
+                        fig.update_layout(title=f"{ticker_symbol} Today", height=320)
+                        st.plotly_chart(fig, use_container_width=True, key=f"chart_{i}")
+                except:
+                    st.info(f"No intraday chart available for {ticker_symbol}")
 
+    # Allocation
     if total_portfolio_value > 0:
         st.subheader("Portfolio Allocation")
         alloc_data = portfolio_df[['Ticker', 'Current Value']].copy() if not portfolio_df.empty else pd.DataFrame(columns=['Ticker', 'Current Value'])
