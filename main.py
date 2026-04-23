@@ -27,7 +27,8 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# ----------------- DATABASE -----------------
+# ----------------- DATABASE ----------------- 
+# (All your DB functions remain unchanged - paste them here from your previous version)
 def get_db_connection():
     conn = sqlite3.connect('portfolio.db')
     conn.row_factory = sqlite3.Row
@@ -194,7 +195,7 @@ def call_grok(prompt, conversation_history=None):
     except Exception as e:
         return f"❌ Request Error: {str(e)}"
 
-# ----------------- FULL ANALYSIS (with fresh prices) -----------------
+# ----------------- FULL ANALYSIS WITH STRONG PRICE VALIDATION -----------------
 def run_full_analysis(selected_account):
     today = datetime.now().strftime("%B %d, %Y")
     portfolio_df = calculate_portfolio(selected_account)
@@ -202,12 +203,13 @@ def run_full_analysis(selected_account):
     risk_tolerance = get_risk_tolerance(selected_account)
     pending_df = load_pending_orders(selected_account)
   
-    # Fresh price snapshot to fight hallucinations
-    price_snapshot = ""
+    # Strong price snapshot to prevent hallucinations
+    price_snapshot = "\n**CRITICAL PRICE VALIDATION - USE ONLY THESE CURRENT PRICES:**\n"
     if not portfolio_df.empty:
-        price_snapshot = "\n**CURRENT REAL-TIME PRICES (USE THESE EXACT NUMBERS ONLY - IGNORE OLD DATA):**\n"
         for _, row in portfolio_df.iterrows():
-            price_snapshot += f"- {row['Ticker']}: ${row['Current Price']}\n"
+            price_snapshot += f"- {row['Ticker']}: Current Price = ${row['Current Price']:.2f} (as of analysis time)\n"
+    else:
+        price_snapshot += "No holdings currently.\n"
 
     portfolio_text = portfolio_df.to_string(index=False) if not portfolio_df.empty else "No holdings yet."
     pending_text = pending_df.to_string(index=False) if not pending_df.empty else "No pending orders."
@@ -215,6 +217,8 @@ def run_full_analysis(selected_account):
     prompt = f"""You are a professional market analyst and portfolio manager with a **{risk_tolerance.lower()} risk tolerance**. Today's date is {today}.
 
 {price_snapshot}
+
+**STRICT INSTRUCTION**: Use ONLY the current prices listed above. Do NOT use any old, remembered, or historical prices for any ticker (especially PLTR, SMCI, or others). Ignore all pre-trained knowledge about past prices.
 
 Current Portfolio Snapshot (Account: {selected_account}):
 Cash Available: ${cash:,.2f}
@@ -239,7 +243,7 @@ For each existing holding and new opportunities list as bullets:
 - Based on historical trending, best time of day to Buy/Sell.
 - Summarize in a table.
 
-Be detailed, specific, and actionable. Use clear headings and bullet points. Base all price-related recommendations strictly on the CURRENT REAL-TIME PRICES provided above."""
+Be detailed, specific, and actionable. Use clear headings and bullet points."""
 
     with st.spinner(f"Generating full analysis for {selected_account}..."):
         result = call_grok(prompt)
@@ -255,7 +259,7 @@ Be detailed, specific, and actionable. Use clear headings and bullet points. Bas
 # ----------------- SEPARATE WEEKLY ACTION PLAN -----------------
 def run_weekly_plan(selected_account):
     if "full_analysis" not in st.session_state:
-        return "Please run Full Daily Analysis first."
+        return "Please run Full Daily Analysis first to generate context."
 
     weekly_prompt = """Using the previous full analysis, create a clean and practical **Weekly Action Plan**.
 
@@ -481,7 +485,7 @@ with tab2:
                     st.success(f"Deleted {ticker}")
                     st.rerun()
 
-    # Pending Orders, Intraday Charts, Sector Chart, Pie Chart (kept from previous stable version)
+    # Pending Orders, Intraday Charts, Sector Chart, Pie Chart (unchanged)
     pending = load_pending_orders(selected_account)
     if not pending.empty:
         st.subheader("📋 Pending Orders")
