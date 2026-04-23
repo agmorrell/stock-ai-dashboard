@@ -428,11 +428,12 @@ with tab2:
     df = calculate_portfolio(selected)
     cash = get_cash_balance(selected)
     
-    # SAFE total_value calculation (this fixes the error)
-    if not df.empty and "Current Value" in df.columns:
+    # ROBUST total_value calculation - this fixes the ValueError
+    if df is not None and not df.empty and "Current Value" in df.columns:
         current_value_sum = float(df["Current Value"].sum())
     else:
         current_value_sum = 0.0
+    
     total_value = current_value_sum + float(cash)
 
     st.subheader("📊 Performance Metrics")
