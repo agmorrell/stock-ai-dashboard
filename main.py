@@ -226,6 +226,7 @@ For each existing holding and new opportunities:
 - Suggest entry/exit zones or triggers.
 - Provide reasoning tied to momentum and risk.
 - Assign risk level and stop-loss ideas.
+- Summarize in a table
 
 Be detailed, specific, and actionable. Use clear headings and bullet points."""
 
@@ -254,7 +255,7 @@ Use this exact structure:
 **Friday:**
 - ...
 
-Focus on high-priority moves, risk management, and following through on the recommendations."""
+Focus on high-priority moves, risk management, and following through on the recommendations. Summarize by day in a table. """
 
         with st.spinner("Creating Weekly Action Plan..."):
             weekly_plan = call_grok(weekly_prompt, [
