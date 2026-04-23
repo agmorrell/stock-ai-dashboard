@@ -396,14 +396,14 @@ with tab2:
   
     st.divider()
   
-    # Holdings Table with colored Today % Change - FIXED
+    # ==================== FIXED HOLDINGS TABLE ====================
     if not portfolio_df.empty:
         st.subheader("Current Holdings + Daily Performance")
         
-        # Create a copy to avoid modifying the original cached dataframe
+        # Work on a copy
         display_df = portfolio_df.copy()
         
-        # Safe formatting using a simple dictionary (avoid complex lambdas)
+        # Safe number formatting
         styled_df = display_df.style.format({
             "Cost Basis": "${:.2f}",
             "Current Price": "${:.2f}",
@@ -411,23 +411,27 @@ with tab2:
             "Unrealized Gain $": "${:.2f}",
             "Unrealized Gain %": "{:.2f}%",
             "Today % Change": "{:.2f}%"
-        }, na_rep="N/A")   # This handles any remaining "N/A" safely
+        }, na_rep="N/A")
         
-        # Conditional coloring ONLY on Today % Change (much more stable)
-        def color_today_change(val):
+        # Safe coloring for Today % Change column
+        def highlight_change(val):
             try:
-                if isinstance(val, (int, float)):
-                    if val > 0:
-                        return 'color: #00cc00'
-                    elif val < 0:
-                        return 'color: #ff4444'
+                if pd.isna(val) or str(val).strip() in ["", "N/A"]:
+                    return ''
+                val = float(val)
+                if val > 0:
+                    return 'color: #00cc00'
+                elif val < 0:
+                    return 'color: #ff4444'
             except:
                 pass
-            return ''   # default (black/gray)
+            return ''
         
-        styled_df = styled_df.applymap(color_today_change, subset=['Today % Change'])
+        # Use .map() (modern pandas)
+        styled_df = styled_df.map(highlight_change, subset=['Today % Change'])
         
-        st.dataframe(styled_df, use_container_width=True, hide_index=True)  
+        st.dataframe(styled_df, use_container_width=True, hide_index=True)
+  
     # Pending Orders
     pending = load_pending_orders(selected_account)
     if not pending.empty:
