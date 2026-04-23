@@ -18,83 +18,79 @@ st.set_page_config(page_title="AI Stock Dashboard", layout="wide")
 st.title("🚀 My Personal AI Stock Dashboard")
 st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M %p EST')}")
 
-# Clean CSS
+# Improved CSS for consistent font + controlled bullet spacing
 st.markdown("""
     <style>
     .stMarkdown, .stMarkdown p, .stMarkdown li {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        font-size: 1.05em;
-        line-height: 1.75;
-        margin-bottom: 0.85em;
+        font-size: 1.06em;          /* Slightly larger, consistent size */
+        line-height: 1.78;          /* Balanced line spacing */
+        margin-bottom: 0.9em;
     }
     .stMarkdown p, .stMarkdown li {
         white-space: pre-wrap;
         word-break: break-word;
         overflow-wrap: break-word;
     }
-    .stMarkdown h1 { font-size: 1.85em; margin: 2em 0 0.8em 0; color: #1f77b4; }
-    .stMarkdown h2 { font-size: 1.55em; margin: 1.8em 0 0.7em 0; color: #1f77b4; }
+    .stMarkdown h1 { font-size: 1.9em; margin: 2.2em 0 0.9em 0; color: #1f77b4; }
+    .stMarkdown h2 { font-size: 1.6em; margin: 1.9em 0 0.8em 0; color: #1f77b4; }
     .stMarkdown h3 { 
-        font-size: 1.35em; 
-        margin: 1.6em 0 0.6em 0; 
+        font-size: 1.4em; 
+        margin: 1.7em 0 0.7em 0; 
         color: #1f77b4; 
         border-left: 5px solid #1f77b4; 
         padding-left: 12px; 
     }
     .stMarkdown ul, .stMarkdown ol {
-        padding-left: 1.9em;
-        margin-bottom: 1.1em;
+        padding-left: 2.0em;
+        margin-bottom: 1.2em;
     }
     .stMarkdown li {
-        margin-bottom: 0.55em;
+        margin-bottom: 0.65em;      /* Good spacing between bullets without excess */
     }
     .stMarkdown h3 + ul, .stMarkdown h3 + ol {
         background-color: #f8f9fa;
-        padding: 1.2em 1.5em;
+        padding: 1.3em 1.6em;
         border-radius: 8px;
         border-left: 5px solid #1f77b4;
-        margin: 1.2em 0;
+        margin: 1.3em 0;
+    }
+    /* Ensure bold/italic inside dense sections match body font */
+    .stMarkdown em, .stMarkdown i, .stMarkdown strong, .stMarkdown b {
+        font-size: 1.06em;
+        margin: 0 2px;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# Highly refined aggressive cleaner for trading setups
+# Generic cleaning function (no custom trading rules)
 def clean_analysis_text(text):
     if not text:
         return text
     
-    # 1. Basic punctuation
-    text = re.sub(r'([a-zA-Z0-9)])([.,;:/])([a-zA-Z])', r'\1\2 \3', text)
+    # Generic spacing fixes
+    text = re.sub(r'([a-zA-Z0-9)])([.,;:/])([a-zA-Z])', r'\1\2 \3', text)   # punctuation
+    text = re.sub(r'([a-zA-Z)])([0-9])', r'\1 \2', text)                    # letter + number
+    text = re.sub(r'([0-9])([a-zA-Z(])', r'\1 \2', text)                    # number + letter
     
-    # 2. Number/letter separation
-    text = re.sub(r'([a-zA-Z)])([0-9])', r'\1 \2', text)
-    text = re.sub(r'([0-9])([a-zA-Z(])', r'\1 \2', text)
-    
-    # 3. Trading keywords
-    text = re.sub(r'(\w+)(Long|Short|Entry|Stop|Target|StopLoss|Catalyst|Momentum|Squeeze|Play|Hold|Trim|Add)', r'\1 \2', text, flags=re.IGNORECASE)
-    
-    # 4. Dashes, slashes, ranges
+    # Spaces around dashes, slashes, plus
     text = re.sub(r'([0-9.])(−|-)([0-9.])', r'\1 - \3', text)
-    text = re.sub(r'([0-9a-zA-Z)])([/\\])([0-9a-zA-Z(])', r'\1 / \3', text)
+    text = re.sub(r'([0-9a-zA-Z)])([/\\+])([0-9a-zA-Z(])', r'\1 \2 \3', text)
     
-    # 5. Parentheses and price targets
+    # Parentheses
     text = re.sub(r'\)([a-zA-Z0-9])', r') \1', text)
     text = re.sub(r'([a-zA-Z0-9])\(', r'\1 (', text)
     text = re.sub(r'([0-9,]+)\)([a-zA-Z])', r'\1) \2', text)
     
-    # 6. Specific patterns from your latest examples
-    text = re.sub(r'([0-9.])\+([a-zA-Z])', r'\1 + \2', text)
-    text = re.sub(r'([0-9.])(onVWAP|gap−up|pullbackto|post−datapop)', r'\1 \2', text, flags=re.IGNORECASE)
-    text = re.sub(r'(today′s|pre|post)([0-9])', r'\1 \2', text, flags=re.IGNORECASE)
-    text = re.sub(r'([0-9,]+)([A-Za-z])', r'\1 \2', text)
-    text = re.sub(r'([A-Za-z])([0-9,]+)', r'\1 \2', text)
-    
-    # 7. Final aggressive passes
+    # Capital letter after lowercase or number (very effective for run-ons)
     text = re.sub(r'([a-z0-9)])([A-Z])', r'\1 \2', text)
-    text = re.sub(r'(\w{10,})([A-Z])', r'\1 \2', text)
-    text = re.sub(r'([0-9.])([A-Z])', r'\1 \2', text)
+    
+    # Break very long glued words
+    text = re.sub(r'(\w{12,})([A-Z])', r'\1 \2', text)
     
     return text
+
+# (The rest of your code remains exactly the same — database, portfolio calculation, Grok API, tabs, etc.)
 
 # ----------------- DATABASE -----------------
 def get_db_connection():
