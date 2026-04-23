@@ -18,13 +18,13 @@ st.set_page_config(page_title="AI Stock Dashboard", layout="wide")
 st.title("🚀 My Personal AI Stock Dashboard")
 st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M %p EST')}")
 
-# Clean, consistent CSS with better bullet control
+# Clean CSS
 st.markdown("""
     <style>
     .stMarkdown, .stMarkdown p, .stMarkdown li {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         font-size: 1.05em;
-        line-height: 1.72;
+        line-height: 1.75;
         margin-bottom: 0.85em;
     }
     .stMarkdown p, .stMarkdown li {
@@ -32,7 +32,7 @@ st.markdown("""
         word-break: break-word;
         overflow-wrap: break-word;
     }
-    .stMarkdown h1 { font-size: 1.85em; margin: 2.0em 0 0.8em 0; color: #1f77b4; }
+    .stMarkdown h1 { font-size: 1.85em; margin: 2em 0 0.8em 0; color: #1f77b4; }
     .stMarkdown h2 { font-size: 1.55em; margin: 1.8em 0 0.7em 0; color: #1f77b4; }
     .stMarkdown h3 { 
         font-size: 1.35em; 
@@ -43,31 +43,27 @@ st.markdown("""
     }
     .stMarkdown ul, .stMarkdown ol {
         padding-left: 1.9em;
-        margin-bottom: 1.0em;
+        margin-bottom: 1.1em;
     }
     .stMarkdown li {
-        margin-bottom: 0.5em;   /* Tight but readable between bullets */
+        margin-bottom: 0.55em;
     }
     .stMarkdown h3 + ul, .stMarkdown h3 + ol {
         background-color: #f8f9fa;
-        padding: 1.1em 1.4em;
+        padding: 1.2em 1.5em;
         border-radius: 8px;
         border-left: 5px solid #1f77b4;
-        margin: 1.1em 0;
-    }
-    /* Fix italic/bold inside dense text */
-    .stMarkdown em, .stMarkdown i, .stMarkdown strong, .stMarkdown b {
-        margin: 0 2px;
+        margin: 1.2em 0;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# Very aggressive cleaner for trading text
+# Highly refined aggressive cleaner for trading text
 def clean_analysis_text(text):
     if not text:
         return text
     
-    # 1. Basic punctuation
+    # 1. Basic punctuation spacing
     text = re.sub(r'([a-zA-Z0-9)])([.,;:/])([a-zA-Z])', r'\1\2 \3', text)
     
     # 2. Number/letter separation
@@ -75,7 +71,7 @@ def clean_analysis_text(text):
     text = re.sub(r'([0-9])([a-zA-Z(])', r'\1 \2', text)
     
     # 3. Trading keywords
-    text = re.sub(r'(\w+)(Long|Short|Entry|Stop|Target|StopLoss|Catalyst|Momentum|Squeeze|Play)', r'\1 \2', text, flags=re.IGNORECASE)
+    text = re.sub(r'(\w+)(Long|Short|Entry|Stop|Target|StopLoss|Catalyst|Momentum|Squeeze|Play|Hold|Trim|Add)', r'\1 \2', text, flags=re.IGNORECASE)
     
     # 4. Dashes, slashes, ranges
     text = re.sub(r'([0-9.])(−|-)([0-9.])', r'\1 - \3', text)
@@ -91,14 +87,20 @@ def clean_analysis_text(text):
     text = re.sub(r'([A-Za-z])([0-9.])', r'\1 \2', text)
     text = re.sub(r'([a-z0-9)])([A-Z])', r'\1 \2', text)
     text = re.sub(r'([0-9,]+)\)([a-z])', r'\1) \2', text, flags=re.IGNORECASE)
+    text = re.sub(r'(\w+)\+\s*([0-9])', r'\1 + \2', text)
     
-    # 7. Final aggressive cleanup for very dense strings
+    # 7. Final aggressive passes
     text = re.sub(r'(\w{10,})([A-Z])', r'\1 \2', text)
     text = re.sub(r'([0-9.])([A-Z])', r'\1 \2', text)
+    text = re.sub(r'([a-z0-9)])([A-Z])', r'\1 \2', text)
+    
+    # 8. Extra cleanup for very dense strings
+    text = re.sub(r'([0-9,]+)([A-Za-z])', r'\1 \2', text)
+    text = re.sub(r'([A-Za-z])([0-9,]+)', r'\1 \2', text)
     
     return text
 
-# ----------------- DATABASE (kept unchanged) -----------------
+# ----------------- DATABASE -----------------
 def get_db_connection():
     conn = sqlite3.connect('portfolio.db')
     conn.row_factory = sqlite3.Row
