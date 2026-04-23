@@ -428,8 +428,11 @@ with tab2:
     df = calculate_portfolio(selected)
     cash = get_cash_balance(selected)
     
-    # FIXED: Safe total_value calculation
-    current_value_sum = float(df["Current Value"].sum()) if not df.empty and "Current Value" in df.columns else 0.0
+    # SAFE total_value calculation (this fixes the error)
+    if not df.empty and "Current Value" in df.columns:
+        current_value_sum = float(df["Current Value"].sum())
+    else:
+        current_value_sum = 0.0
     total_value = current_value_sum + float(cash)
 
     st.subheader("📊 Performance Metrics")
@@ -484,9 +487,8 @@ with tab2:
         st.subheader("Allocation Charts")
         c1, c2 = st.columns(2)
         with c1:
-            pie_data = df[['Ticker', 'Current Value']].copy() if not df.empty else pd.DataFrame()
-            if not pie_data.empty:
-                pie_data = pie_data.copy()
+            pie_data = df[['Ticker', 'Current Value']].copy() if not df.empty else pd.DataFrame(columns=['Ticker', 'Current Value'])
+            pie_data = pie_data.copy()
             pie_data.loc[len(pie_data)] = ['Cash', cash]
             st.plotly_chart(px.pie(pie_data, values='Current Value', names='Ticker', title="Portfolio Allocation (Including Cash)", hole=0.45), use_container_width=True)
         with c2:
@@ -494,7 +496,7 @@ with tab2:
                 sector_df = df.groupby('Sector')['Current Value'].sum().reset_index()
                 sector_df['Percentage'] = (sector_df['Current Value'] / df['Current Value'].sum() * 100)
             else:
-                sector_df = pd.DataFrame()
+                sector_df = pd.DataFrame(columns=['Sector', 'Current Value', 'Percentage'])
             sector_df.loc[len(sector_df)] = ['Cash', cash, (cash / total_value * 100) if total_value > 0 else 0]
             sector_df = sector_df.sort_values('Percentage', ascending=False)
             fig_sector = px.bar(sector_df, x='Percentage', y='Sector', orientation='h', title="Sector Allocation (%)", text='Percentage', color='Percentage', color_continuous_scale='Blues')
