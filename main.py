@@ -17,62 +17,69 @@ st.set_page_config(page_title="AI Stock Dashboard", layout="wide")
 st.title("🚀 My Personal AI Stock Dashboard")
 st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M %p EST')}")
 
-# Clean, minimal CSS focused on fixing spacing and run-together text
+# Final tuned CSS - specifically fixes parenthesis, slashes, and run-together text
 st.markdown("""
     <style>
-    /* Consistent base styling */
+    /* Base font consistency */
     .stMarkdown, .stMarkdown p, .stMarkdown li {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         font-size: 1.05em;
-        line-height: 1.70;
-        margin-bottom: 0.85em;
+        line-height: 1.75;
+        margin-bottom: 0.95em;
     }
     
-    /* Force proper word wrapping */
+    /* Force aggressive word breaking for dense trading text */
     .stMarkdown p, .stMarkdown li {
-        white-space: pre-wrap;
-        word-break: break-word;
+        white-space: pre-wrap !important;
+        word-break: break-all !important;
+        overflow-wrap: break-word !important;
+        hyphens: auto;
     }
     
-    /* Headings - keep them nicely separated */
-    .stMarkdown h1 { font-size: 1.85em; margin: 2.0em 0 0.8em 0; color: #1f77b4; }
-    .stMarkdown h2 { font-size: 1.55em; margin: 1.8em 0 0.7em 0; color: #1f77b4; }
+    /* Extra protection for parentheses, slashes, and numbers */
+    .stMarkdown p span, .stMarkdown li span {
+        word-break: break-all !important;
+    }
+    
+    /* Headings */
+    .stMarkdown h1 { font-size: 1.85em; margin: 2.1em 0 0.8em 0; color: #1f77b4; }
+    .stMarkdown h2 { font-size: 1.55em; margin: 1.9em 0 0.7em 0; color: #1f77b4; }
     .stMarkdown h3 { 
         font-size: 1.35em; 
-        margin: 1.6em 0 0.6em 0; 
+        margin: 1.7em 0 0.6em 0; 
         color: #1f77b4; 
         border-left: 5px solid #1f77b4; 
         padding-left: 12px; 
     }
     
-    /* Tighten spacing between bullets of the same list */
+    /* Tight but readable bullet spacing */
     .stMarkdown ul, .stMarkdown ol {
-        padding-left: 1.8em;
-        margin-bottom: 1.0em;
+        padding-left: 1.9em;
+        margin-bottom: 1.1em;
     }
     .stMarkdown li {
-        margin-bottom: 0.5em;   /* Reduced space between bullets */
+        margin-bottom: 0.55em;
     }
     
-    /* Visual separation for recommendation blocks without adding extra gaps */
+    /* Visual block for recommendations */
     .stMarkdown h3 + ul, .stMarkdown h3 + ol {
         background-color: #f8f9fa;
-        padding: 1.1em 1.4em;
-        border-radius: 6px;
+        padding: 1.2em 1.5em;
+        border-radius: 8px;
         border-left: 5px solid #1f77b4;
-        margin: 1.1em 0 1.4em 0;
+        margin: 1.2em 0;
     }
     
-    /* Fix italic and bold spacing */
+    /* Fix italic/bold inside dense text */
     .stMarkdown em, .stMarkdown i, .stMarkdown strong, .stMarkdown b {
         font-style: italic;
         font-weight: 600;
-        margin: 0 1px;
+        margin: 0 2px;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# ----------------- DATABASE -----------------
+# ----------------- DATABASE (unchanged) -----------------
 def get_db_connection():
     conn = sqlite3.connect('portfolio.db')
     conn.row_factory = sqlite3.Row
