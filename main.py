@@ -14,10 +14,11 @@ import sqlite3
 from datetime import datetime
 
 st.set_page_config(page_title="AI Stock Dashboard", layout="wide")
+
 st.title("🚀 My Personal AI Stock Dashboard")
 st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M %p EST')}")
 
-# CSS
+# CSS - Light mode friendly
 st.markdown("""
     <style>
     div[data-testid="stMetricValue"] { font-size: 1.45em !important; font-weight: 600 !important; }
@@ -125,8 +126,9 @@ def delete_pending_order(order_id):
 def calculate_portfolio(account_name):
     df = load_holdings(account_name)
     if df.empty:
-        return pd.DataFrame(columns=['Ticker','Shares','Cost Basis','Current Price','Current Value','Unrealized Gain $','Unrealized Gain %','Sector','Today % Change'])
-   
+        return pd.DataFrame(columns=['Ticker','Shares','Cost Basis','Current Price','Current Value',
+                                     'Unrealized Gain $','Unrealized Gain %','Sector','Today % Change'])
+  
     data = []
     for _, row in df.iterrows():
         ticker_symbol = row['ticker']
@@ -134,15 +136,16 @@ def calculate_portfolio(account_name):
             time.sleep(random.uniform(0.5, 1.0))
             ticker = Ticker(ticker_symbol)
             info = ticker.info
-            current_price = float(info.get('currentPrice') or info.get('regularMarketPrice') or info.get('previousClose') or 0.0)
+            current_price = float(info.get('currentPrice') or info.get('regularMarketPrice') or 
+                                  info.get('previousClose') or 0.0)
             sector = info.get('sector') or "Other"
             today_change_pct = float(info.get('regularMarketChangePercent') or 0.0)
-           
+          
             current_value = row['shares'] * current_price
             cost = row['shares'] * row['cost_basis']
             gain_dollar = current_value - cost
             gain_pct = (gain_dollar / cost * 100) if cost > 0 else 0.0
-           
+          
             data.append({
                 'Ticker': ticker_symbol,
                 'Shares': round(row['shares'], 4),
@@ -166,7 +169,7 @@ def calculate_portfolio(account_name):
                 'Sector': "Other",
                 'Today % Change': "N/A"
             })
-   
+  
     return pd.DataFrame(data)
 
 # ----------------- GROK API -----------------
@@ -174,11 +177,11 @@ def call_grok(prompt, conversation_history=None):
     api_key = os.environ.get("GROK_API_KEY")
     if not api_key:
         return "❌ Grok API key not found."
-   
+  
     model = "grok-4-1-fast-reasoning"
     messages = conversation_history or []
     messages.append({"role": "user", "content": prompt})
-   
+  
     try:
         response = requests.post(
             "https://api.x.ai/v1/chat/completions",
@@ -199,10 +202,10 @@ def run_full_analysis(selected_account):
     cash = get_cash_balance(selected_account)
     risk_tolerance = get_risk_tolerance(selected_account)
     pending_df = load_pending_orders(selected_account)
-   
+  
     portfolio_text = portfolio_df.to_string(index=False) if not portfolio_df.empty else "No holdings yet."
     pending_text = pending_df.to_string(index=False) if not pending_df.empty else "No pending orders."
-   
+  
     prompt = f"""You are a professional market analyst and portfolio manager with a **{risk_tolerance.lower()} risk tolerance**. Today's date is {today}.
 Current Portfolio Snapshot (Account: {selected_account}):
 Cash Available: ${cash:,.2f}
@@ -230,6 +233,7 @@ For each existing holding and new opportunities:
 - Rebalancing summary.
 - How to compound daily gains responsibly.
 Be very detailed, specific, and actionable. Use clear headings and bullet points."""
+
     with st.spinner(f"Generating full detailed analysis for {selected_account}..."):
         result = call_grok(prompt)
         st.session_state.full_analysis = result
@@ -267,7 +271,7 @@ with tab1:
     st.header("Full Daily Market + Portfolio Analysis")
     if "full_analysis" in st.session_state:
         st.markdown(st.session_state.full_analysis)
-       
+      
         st.divider()
         st.subheader("💬 Ask Grok for Clarification")
         st.markdown(
@@ -281,9 +285,9 @@ with tab1:
             """,
             unsafe_allow_html=True
         )
-       
+      
         user_question = st.text_input("Your question:", placeholder="Type your question here...", key="followup_input")
-       
+      
         if st.button("Send Question to Grok", key="send_followup"):
             if user_question.strip():
                 with st.spinner("Getting clarification from Grok..."):
@@ -300,8 +304,8 @@ with tab1:
         st.info("Select an account and click 'Run Full Daily Analysis' in the sidebar.")
 
 with tab2:
-    st.header("Portfolio Tracker")
-   
+    st.header("💼 My Portfolio")
+  
     # Account Selector + New Account
     st.subheader("Portfolio Account")
     col1, col2 = st.columns([3, 2])
@@ -318,7 +322,7 @@ with tab2:
                 add_account(new_name.strip())
                 st.success(f"Account '{new_name}' created!")
                 st.rerun()
-   
+  
     # Risk Tolerance
     current_risk = get_risk_tolerance(selected_account)
     new_risk = st.selectbox("Risk Tolerance", ["Conservative", "Moderate", "Aggressive"],
@@ -327,9 +331,9 @@ with tab2:
         set_risk_tolerance(selected_account, new_risk)
         st.success(f"Risk tolerance updated to {new_risk}")
         st.rerun()
-   
+  
     st.divider()
-   
+  
     # Cash Balance
     st.subheader("💰 Cash Balance")
     current_cash = get_cash_balance(selected_account)
@@ -338,9 +342,9 @@ with tab2:
         update_cash_balance(selected_account, new_cash)
         st.success(f"Cash updated to ${new_cash:,.2f}")
         st.rerun()
-   
+  
     st.divider()
-   
+  
     # Add Holding
     with st.expander("➕ Add or Update Holding"):
         col1, col2, col3 = st.columns(3)
@@ -356,66 +360,60 @@ with tab2:
                 st.cache_data.clear()
                 st.success(f"✅ {ticker} saved!")
                 st.rerun()
-   
+  
     # Portfolio Data
     portfolio_df = calculate_portfolio(selected_account)
     cash = get_cash_balance(selected_account)
-   
-    # Safe total value
+  
+    # Safe total value calculations
     if not portfolio_df.empty and "Current Value" in portfolio_df.columns:
         total_holdings_value = float(pd.to_numeric(portfolio_df["Current Value"], errors='coerce').sum())
     else:
         total_holdings_value = 0.0
-   
+  
     total_portfolio_value = total_holdings_value + float(cash)
-   
+  
     # Safe numerics
     numeric_gain = pd.to_numeric(portfolio_df.get("Unrealized Gain $", pd.Series()), errors='coerce').fillna(0)
     numeric_return = pd.to_numeric(portfolio_df.get("Unrealized Gain %", pd.Series()), errors='coerce').fillna(0)
-   
+  
     total_unrealized_gain = float(numeric_gain.sum())
     overall_return_pct = (total_unrealized_gain / (total_holdings_value + 0.0001) * 100) if total_holdings_value > 0 else 0.0
     num_positions = len(portfolio_df)
     avg_return_per_position = float(numeric_return.mean()) if num_positions > 0 else 0.0
-   
-    largest_pos_pct = (float(pd.to_numeric(portfolio_df["Current Value"], errors='coerce').max()) / total_holdings_value * 100) if total_holdings_value > 0 and not portfolio_df.empty else 0.0
+  
+    largest_pos_pct = (float(pd.to_numeric(portfolio_df.get("Current Value", pd.Series(0)), errors='coerce').max()) / total_holdings_value * 100) if total_holdings_value > 0 and not portfolio_df.empty else 0.0
     cash_pct = (float(cash) / total_portfolio_value * 100) if total_portfolio_value > 0 else 0.0
-   
+  
     st.subheader("📊 Portfolio Performance Metrics")
     col1, col2, col3, col4, col5, col6 = st.columns(6)
-    with col1:
-        st.metric("Total Portfolio Value", f"${total_portfolio_value:,.2f}")
-    with col2:
-        st.metric("Total Unrealized P/L", f"${total_unrealized_gain:,.2f}", delta=f"{overall_return_pct:.2f}%")
-    with col3:
-        st.metric("Avg Return per Position", f"{avg_return_per_position:.2f}%")
-    with col4:
-        st.metric("Number of Positions", num_positions)
-    with col5:
-        st.metric("Largest Position", f"{largest_pos_pct:.1f}%")
-    with col6:
-        st.metric("Cash Allocation", f"{cash_pct:.1f}%")
-   
+    with col1: st.metric("Total Portfolio Value", f"${total_portfolio_value:,.2f}")
+    with col2: st.metric("Total Unrealized P/L", f"${total_unrealized_gain:,.2f}", delta=f"{overall_return_pct:.2f}%")
+    with col3: st.metric("Avg Return per Position", f"{avg_return_per_position:.2f}%")
+    with col4: st.metric("Number of Positions", num_positions)
+    with col5: st.metric("Largest Position", f"{largest_pos_pct:.1f}%")
+    with col6: st.metric("Cash Allocation", f"{cash_pct:.1f}%")
+  
     st.divider()
-   
-    # Holdings Table with colored Today % Change
+  
+    # Holdings Table
     if not portfolio_df.empty:
         st.subheader("Current Holdings + Daily Performance")
         styled_df = portfolio_df.style.format({
             "Cost Basis": "${:.2f}",
-            "Current Price": lambda x: f"${x:.2f}" if isinstance(x, (int, float)) else x,
-            "Current Value": lambda x: f"${x:.2f}" if isinstance(x, (int, float)) else x,
-            "Unrealized Gain $": lambda x: f"${x:.2f}" if isinstance(x, (int, float)) else x,
-            "Unrealized Gain %": lambda x: f"{x:.2f}%" if isinstance(x, (int, float)) else x,
-            "Today % Change": lambda x: f"{x:.2f}%" if isinstance(x, (int, float)) else x
+            "Current Price": "${:.2f}",
+            "Current Value": "${:.2f}",
+            "Unrealized Gain $": "${:.2f}",
+            "Unrealized Gain %": "{:.2f}%",
+            "Today % Change": "{:.2f}%"
         }).apply(
-            lambda x: ['color: #00cc00' if isinstance(v, (int, float)) and v > 0 else 
-                       'color: #ff4444' if isinstance(v, (int, float)) and v < 0 else '' for v in x], 
+            lambda x: ['color: #00cc00' if isinstance(v, (int, float)) and v > 0 else
+                       'color: #ff4444' if isinstance(v, (int, float)) and v < 0 else '' for v in x],
             subset=['Today % Change']
         )
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
-   
-    # PENDING ORDERS SECTION - now properly placed and restored
+  
+    # Pending Orders
     pending = load_pending_orders(selected_account)
     if not pending.empty:
         st.subheader("📋 Pending Orders")
@@ -429,8 +427,8 @@ with tab2:
                     st.rerun()
     else:
         st.info("No pending orders yet. Add one using the expander below.")
-   
-    # Add Pending Order expander
+  
+    # Add Pending Order
     with st.expander("📋 Add Pending Order"):
         c1, c2 = st.columns(2)
         with c1:
@@ -444,8 +442,8 @@ with tab2:
                 add_pending_order(selected_account, po_tkr, po_type, po_shares, po_price)
                 st.success("Pending order added")
                 st.rerun()
-   
-    # Intraday Charts with red cost basis line
+  
+    # Intraday Charts
     if not portfolio_df.empty:
         st.subheader("📈 Intraday Charts (1D) with Cost Basis")
         st.caption("Solid red line = your cost basis per share")
@@ -459,45 +457,42 @@ with tab2:
                     hist = t.history(period="1d", interval="5m")
                     if not hist.empty:
                         fig = go.Figure()
-                        fig.add_trace(go.Scatter(x=hist.index, y=hist['Close'], mode='lines', line=dict(color='#1f77b4', width=2), name="Price"))
+                        fig.add_trace(go.Scatter(x=hist.index, y=hist['Close'], mode='lines', 
+                                               line=dict(color='#1f77b4', width=2), name="Price"))
                         fig.add_hline(y=cost_basis, line_dash="solid", line_color="red", line_width=2.5,
                                       annotation_text=f"Cost Basis (${cost_basis:.2f})", annotation_position="top right")
                         fig.update_layout(title=f"{ticker_symbol} Today", height=320, margin=dict(t=40))
                         st.plotly_chart(fig, use_container_width=True, key=f"chart_{i}")
                 except:
                     st.info(f"No intraday chart available for {ticker_symbol}")
-   
+  
     # Allocation Charts
     if total_portfolio_value > 0:
         st.subheader("Portfolio Allocation")
         alloc_data = portfolio_df[['Ticker', 'Current Value']].copy() if not portfolio_df.empty else pd.DataFrame(columns=['Ticker', 'Current Value'])
         alloc_data = alloc_data.copy()
         alloc_data.loc[len(alloc_data)] = ['Cash', cash]
+        
         fig_pie = px.pie(alloc_data, values='Current Value', names='Ticker',
                         title="Portfolio Allocation (Including Cash)", hole=0.45)
         fig_pie.update_traces(textinfo='percent+label')
         st.plotly_chart(fig_pie, use_container_width=True)
-   
+
     if not portfolio_df.empty and total_holdings_value > 0:
         st.subheader("Sector Allocation (%)")
         sector_df = portfolio_df.groupby('Sector')['Current Value'].sum().reset_index()
         sector_df['Percentage'] = (sector_df['Current Value'] / total_holdings_value * 100)
         sector_df.loc[len(sector_df)] = ['Cash', cash, (cash / total_portfolio_value * 100) if total_portfolio_value > 0 else 0]
         sector_df = sector_df.sort_values('Percentage', ascending=False)
-       
+      
         fig_sector = px.bar(
-            sector_df,
-            x='Percentage',
-            y='Sector',
-            orientation='h',
-            title="Allocation by Sector (%)",
-            text='Percentage',
-            color='Percentage',
-            color_continuous_scale='Blues'
+            sector_df, x='Percentage', y='Sector', orientation='h',
+            title="Allocation by Sector (%)", text='Percentage',
+            color='Percentage', color_continuous_scale='Blues'
         )
         fig_sector.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
         st.plotly_chart(fig_sector, use_container_width=True)
-   
+  
     st.info(f"💰 Available Cash: ${cash:,.2f}")
 
 st.caption("Built with Streamlit + yfinance + Grok API • Educational use only")
