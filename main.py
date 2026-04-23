@@ -10,42 +10,6 @@ import requests
 import os
 import time
 import random
-# ================== STRONGER TRADING TEXT CLEANER ==================
-def clean_analysis_text(text):
-    if not text:
-        return text
-    
-    # 1. Basic punctuation spacing
-    text = re.sub(r'([a-zA-Z0-9)])([.,;:/])([a-zA-Z])', r'\1\2 \3', text)
-    
-    # 2. Number/letter spacing
-    text = re.sub(r'([a-zA-Z)])([0-9])', r'\1 \2', text)
-    text = re.sub(r'([0-9])([a-zA-Z(])', r'\1 \2', text)
-    
-    # 3. Trading keywords spacing
-    text = re.sub(r'(\w+)(Long|Short|Entry|Stop|Target|StopLoss|Catalyst|Momentum)', r'\1 \2', text, flags=re.IGNORECASE)
-    text = re.sub(r'(Entry|Stop|Target)([0-9])', r'\1 \2', text, flags=re.IGNORECASE)
-    text = re.sub(r'([0-9])(Entry|Stop|Target)', r'\1 \2', text, flags=re.IGNORECASE)
-    
-    # 4. Dash / range fixes
-    text = re.sub(r'([0-9.])(−|-)([0-9.])', r'\1 - \3', text)
-    text = re.sub(r'([0-9.])([/\\])([0-9.])', r'\1 / \3', text)
-    
-    # 5. Parentheses and price targets
-    text = re.sub(r'\)([A-Za-z0-9])', r') \1', text)
-    text = re.sub(r'([A-Za-z0-9])\(', r'\1 (', text)
-    text = re.sub(r'([0-9,]+)\)([A-Za-z])', r'\1) \2', text)
-    
-    # 6. Common run-together patterns from your examples
-    text = re.sub(r'(pre|post|earnings|gap|high|retest|surge|flow|coattails|hype|vol|squeeze)', r' \1', text, flags=re.IGNORECASE)
-    text = re.sub(r'([0-9.])([A-Za-z])', r'\1 \2', text)
-    text = re.sub(r'([A-Za-z])([0-9.])', r'\1 \2', text)
-    
-    # 7. Final aggressive cleanup
-    text = re.sub(r'([a-z0-9)])([A-Z])', r'\1 \2', text)
-    text = re.sub(r'(\w{8,})([A-Z])', r'\1 \2', text)
-    
-    return text
 import sqlite3
 import re
 from datetime import datetime
@@ -54,13 +18,13 @@ st.set_page_config(page_title="AI Stock Dashboard", layout="wide")
 st.title("🚀 My Personal AI Stock Dashboard")
 st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M %p EST')}")
 
-# Clean CSS with good readability
+# Clean, consistent CSS with better bullet control
 st.markdown("""
     <style>
     .stMarkdown, .stMarkdown p, .stMarkdown li {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         font-size: 1.05em;
-        line-height: 1.75;
+        line-height: 1.72;
         margin-bottom: 0.85em;
     }
     .stMarkdown p, .stMarkdown li {
@@ -68,7 +32,7 @@ st.markdown("""
         word-break: break-word;
         overflow-wrap: break-word;
     }
-    .stMarkdown h1 { font-size: 1.85em; margin: 2em 0 0.8em 0; color: #1f77b4; }
+    .stMarkdown h1 { font-size: 1.85em; margin: 2.0em 0 0.8em 0; color: #1f77b4; }
     .stMarkdown h2 { font-size: 1.55em; margin: 1.8em 0 0.7em 0; color: #1f77b4; }
     .stMarkdown h3 { 
         font-size: 1.35em; 
@@ -79,54 +43,62 @@ st.markdown("""
     }
     .stMarkdown ul, .stMarkdown ol {
         padding-left: 1.9em;
-        margin-bottom: 1.1em;
+        margin-bottom: 1.0em;
     }
     .stMarkdown li {
-        margin-bottom: 0.55em;
+        margin-bottom: 0.5em;   /* Tight but readable between bullets */
     }
     .stMarkdown h3 + ul, .stMarkdown h3 + ol {
         background-color: #f8f9fa;
-        padding: 1.2em 1.5em;
+        padding: 1.1em 1.4em;
         border-radius: 8px;
         border-left: 5px solid #1f77b4;
-        margin: 1.2em 0;
+        margin: 1.1em 0;
+    }
+    /* Fix italic/bold inside dense text */
+    .stMarkdown em, .stMarkdown i, .stMarkdown strong, .stMarkdown b {
+        margin: 0 2px;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# Very aggressive cleaner for trading setups
+# Very aggressive cleaner for trading text
 def clean_analysis_text(text):
     if not text:
         return text
     
-    # 1. Basic spacing
+    # 1. Basic punctuation
     text = re.sub(r'([a-zA-Z0-9)])([.,;:/])([a-zA-Z])', r'\1\2 \3', text)
+    
+    # 2. Number/letter separation
     text = re.sub(r'([a-zA-Z)])([0-9])', r'\1 \2', text)
     text = re.sub(r'([0-9])([a-zA-Z(])', r'\1 \2', text)
     
-    # 2. Trading-specific fixes
-    text = re.sub(r'(\w+)(Long|Short|Entry|Stop|Target|StopLoss|Catalyst)', r'\1 \2', text, flags=re.IGNORECASE)
-    text = re.sub(r'(Entry|Stop|Target)([0-9])', r'\1 \2', text, flags=re.IGNORECASE)
-    text = re.sub(r'([0-9])(Entry|Stop|Target)', r'\1 \2', text, flags=re.IGNORECASE)
+    # 3. Trading keywords
+    text = re.sub(r'(\w+)(Long|Short|Entry|Stop|Target|StopLoss|Catalyst|Momentum|Squeeze|Play)', r'\1 \2', text, flags=re.IGNORECASE)
     
-    # 3. Fix dashes, slashes, parentheses
-    text = re.sub(r'([0-9a-zA-Z)])([/\-−])([0-9a-zA-Z(])', r'\1 \2 \3', text)
+    # 4. Dashes, slashes, ranges
+    text = re.sub(r'([0-9.])(−|-)([0-9.])', r'\1 - \3', text)
+    text = re.sub(r'([0-9a-zA-Z)])([/\\])([0-9a-zA-Z(])', r'\1 / \3', text)
+    
+    # 5. Parentheses and price targets
     text = re.sub(r'\)([a-zA-Z0-9])', r') \1', text)
     text = re.sub(r'([a-zA-Z0-9])\(', r'\1 (', text)
-    
-    # 4. Fix common run-ons you reported
     text = re.sub(r'([0-9,]+)\)([a-zA-Z])', r'\1) \2', text)
-    text = re.sub(r'([A-Za-z]{3})\.([A-Za-z])', r'\1. \2', text)
-    text = re.sub(r'([0-9])−([0-9])', r'\1 - \2', text)
-    text = re.sub(r'([a-z0-9]),([A-Z])', r'\1, \2', text)
     
-    # 5. Final aggressive pass
+    # 6. Specific patterns from your examples
+    text = re.sub(r'([0-9.])([A-Za-z])', r'\1 \2', text)
+    text = re.sub(r'([A-Za-z])([0-9.])', r'\1 \2', text)
     text = re.sub(r'([a-z0-9)])([A-Z])', r'\1 \2', text)
+    text = re.sub(r'([0-9,]+)\)([a-z])', r'\1) \2', text, flags=re.IGNORECASE)
+    
+    # 7. Final aggressive cleanup for very dense strings
     text = re.sub(r'(\w{10,})([A-Z])', r'\1 \2', text)
+    text = re.sub(r'([0-9.])([A-Z])', r'\1 \2', text)
     
     return text
 
-# ----------------- DATABASE (unchanged) -----------------
+# ----------------- DATABASE (kept unchanged) -----------------
 def get_db_connection():
     conn = sqlite3.connect('portfolio.db')
     conn.row_factory = sqlite3.Row
@@ -327,7 +299,7 @@ Be detailed, specific, and actionable. Use headings and bullets."""
         ]
         return cleaned_result
 
-# ----------------- SIDEBAR & TABS (unchanged except for cleaning) -----------------
+# ----------------- SIDEBAR & TABS -----------------
 with st.sidebar:
     st.header("Controls")
     if st.button("🔥 Run Full Daily Analysis", type="primary"):
