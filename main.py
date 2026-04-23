@@ -465,19 +465,7 @@ with tab2:
                     delete_holding(selected_account, ticker)
                     st.cache_data.clear()
                     st.success(f"✅ Deleted {ticker}")
-                    st.rerun()        
-        # Display table with delete buttons
-        for idx, row in portfolio_df.iterrows():
-            col1, col2 = st.columns([9, 1])
-            with col1:
-                st.dataframe(styled_df.iloc[[idx]], use_container_width=True, hide_index=True)
-            with col2:
-                if st.button("🗑️", key=f"del_hold_{selected_account}_{row['Ticker']}"):
-                    delete_holding(selected_account, row['Ticker'])
-                    st.cache_data.clear()
-                    st.success(f"Deleted {row['Ticker']}")
                     st.rerun()
-
     # Pending Orders
     pending = load_pending_orders(selected_account)
     if not pending.empty:
