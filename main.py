@@ -418,11 +418,13 @@ with tab2:
   
     st.divider()
   
-    # Current Holdings with Delete Buttons
+    # ==================== CURRENT HOLDINGS WITH DELETE BUTTONS ====================
     if not portfolio_df.empty:
         st.subheader("Current Holdings + Daily Performance")
         
         display_df = portfolio_df.copy()
+        
+        # Safe styling
         styled_df = display_df.style.format({
             "Cost Basis": "${:.2f}",
             "Current Price": "${:.2f}",
@@ -447,6 +449,23 @@ with tab2:
         
         styled_df = styled_df.map(highlight_change, subset=['Today % Change'])
         
+        # Show each row with its own delete button (more stable approach)
+        for idx, row in portfolio_df.iterrows():
+            ticker = row['Ticker']
+            col_main, col_delete = st.columns([9, 1])
+            with col_main:
+                # Display only this row
+                st.dataframe(
+                    styled_df.iloc[[idx]], 
+                    use_container_width=True, 
+                    hide_index=True
+                )
+            with col_delete:
+                if st.button("🗑️", key=f"del_hold_{selected_account}_{ticker}"):
+                    delete_holding(selected_account, ticker)
+                    st.cache_data.clear()
+                    st.success(f"✅ Deleted {ticker}")
+                    st.rerun()        
         # Display table with delete buttons
         for idx, row in portfolio_df.iterrows():
             col1, col2 = st.columns([9, 1])
