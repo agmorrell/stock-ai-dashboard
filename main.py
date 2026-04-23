@@ -221,12 +221,13 @@ Pending Orders:
 5. List upcoming earnings, macro events, or news catalysts this week.
 
 **Part 2: Personalized Recommendations**
-For each existing holding and new opportunities:
-- Give a clear **Buy / Sell / Hold / Trim / Add** recommendation with specific share amounts or % of cash.
+For each existing holding and new opportunities list as bullets:
+- Give a clear **Buy / Sell / Hold / Trim / Add** recommendation with specific share amounts, cost basis, or % of cash.
 - Suggest entry/exit zones or triggers.
 - Provide reasoning tied to momentum and risk.
 - Assign risk level and stop-loss ideas.
-- Summarize in a table
+- New portfolio share count after recommendation.
+- Summarize in a table.
 
 Be detailed, specific, and actionable. Use clear headings and bullet points."""
 
