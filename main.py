@@ -18,13 +18,13 @@ st.set_page_config(page_title="AI Stock Dashboard", layout="wide")
 st.title("🚀 My Personal AI Stock Dashboard")
 st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M %p EST')}")
 
-# CSS - balanced and clean
+# Clean CSS
 st.markdown("""
     <style>
     .stMarkdown, .stMarkdown p, .stMarkdown li {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        font-size: 1.04em;
-        line-height: 1.72;
+        font-size: 1.05em;
+        line-height: 1.75;
         margin-bottom: 0.9em;
     }
     .stMarkdown p, .stMarkdown li {
@@ -32,7 +32,7 @@ st.markdown("""
         word-break: break-word;
         overflow-wrap: break-word;
     }
-    .stMarkdown h1 { font-size: 1.85em; margin: 2.0em 0 0.8em 0; color: #1f77b4; }
+    .stMarkdown h1 { font-size: 1.85em; margin: 2em 0 0.8em 0; color: #1f77b4; }
     .stMarkdown h2 { font-size: 1.55em; margin: 1.8em 0 0.7em 0; color: #1f77b4; }
     .stMarkdown h3 { 
         font-size: 1.35em; 
@@ -58,17 +58,31 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Helper to clean dense Grok responses (fixes run-together text)
+# Stronger text cleaner for Grok's dense output
 def clean_analysis_text(text):
     if not text:
         return text
-    # Add space after common punctuation when missing
+    
+    # Add space after punctuation when missing
     text = re.sub(r'([a-zA-Z0-9])([.,;:/])([a-zA-Z])', r'\1\2 \3', text)
     text = re.sub(r'([a-zA-Z])([0-9])', r'\1 \2', text)
     text = re.sub(r'([0-9])([a-zA-Z])', r'\1 \2', text)
-    # Fix common run-together patterns in trading text
-    text = re.sub(r'(\w+)(hold|add|buy|sell|trim|deploy|momentum)', r'\1 \2', text, flags=re.IGNORECASE)
-    text = re.sub(r'(cash|holdings|positions|shares)([0-9])', r'\1 \2', text, flags=re.IGNORECASE)
+    
+    # Fix common trading run-ons
+    text = re.sub(r'(\w+)(hold|add|buy|sell|trim|deploy|momentum|squeeze|play|catalyst|explorer)', r'\1 \2', text, flags=re.IGNORECASE)
+    text = re.sub(r'(cash|holdings|positions|shares|K|k)([0-9])', r'\1 \2', text, flags=re.IGNORECASE)
+    text = re.sub(r'([0-9])(K|k)', r'\1 \2', text)
+    
+    # Add space around slashes and dashes in dense text
+    text = re.sub(r'([a-zA-Z0-9])([/\-])([a-zA-Z0-9])', r'\1 \2 \3', text)
+    
+    # Fix specific patterns like "Thu.Momentum" or "70−80"
+    text = re.sub(r'([A-Za-z]{3})\.([A-Za-z])', r'\1. \2', text)
+    text = re.sub(r'([0-9])−([0-9])', r'\1 - \2', text)
+    
+    # Final pass to ensure spaces around commas when followed by capital letter
+    text = re.sub(r'([a-z0-9]),([A-Z])', r'\1, \2', text)
+    
     return text
 
 # ----------------- DATABASE -----------------
@@ -263,9 +277,8 @@ For every holding and new ideas:
 Be detailed, specific, and actionable. Use headings and bullets."""
 
     with st.spinner("Generating full analysis..."):
-        result = call_grok(prompt)
-        # Clean the response to fix run-together text
-        cleaned_result = clean_analysis_text(result)
+        raw_result = call_grok(prompt)
+        cleaned_result = clean_analysis_text(raw_result)
         st.session_state.full_analysis = cleaned_result
         st.session_state.conversation_history = [
             {"role": "user", "content": prompt},
@@ -276,14 +289,17 @@ Be detailed, specific, and actionable. Use headings and bullets."""
 def clean_analysis_text(text):
     if not text:
         return text
-    # Add space after common punctuation when missing
+    # Multiple passes to fix run-together text
     text = re.sub(r'([a-zA-Z0-9])([.,;:/])([a-zA-Z])', r'\1\2 \3', text)
     text = re.sub(r'([a-zA-Z])([0-9])', r'\1 \2', text)
     text = re.sub(r'([0-9])([a-zA-Z])', r'\1 \2', text)
-    # Fix common trading run-ons
-    text = re.sub(r'(\w+)(hold|add|buy|sell|trim|deploy|momentum)', r'\1 \2', text, flags=re.IGNORECASE)
+    text = re.sub(r'(\w+)(hold|add|buy|sell|trim|deploy|momentum|squeeze|play|catalyst|explorer|Thu)', r'\1 \2', text, flags=re.IGNORECASE)
     text = re.sub(r'(cash|holdings|positions|shares)([0-9])', r'\1 \2', text, flags=re.IGNORECASE)
     text = re.sub(r'([0-9])(K|k)', r'\1 \2', text)
+    text = re.sub(r'([a-zA-Z0-9])([/\-])([a-zA-Z0-9])', r'\1 \2 \3', text)
+    text = re.sub(r'([A-Za-z]{3})\.([A-Za-z])', r'\1. \2', text)
+    text = re.sub(r'([0-9])−([0-9])', r'\1 - \2', text)
+    text = re.sub(r'([a-z0-9]),([A-Z])', r'\1, \2', text)
     return text
 
 # ----------------- SIDEBAR -----------------
@@ -319,8 +335,8 @@ with tab1:
             if q.strip():
                 if "conversation_history" not in st.session_state:
                     st.session_state.conversation_history = []
-                resp = call_grok(q, st.session_state.conversation_history)
-                cleaned_resp = clean_analysis_text(resp)
+                raw_resp = call_grok(q, st.session_state.conversation_history)
+                cleaned_resp = clean_analysis_text(raw_resp)
                 st.session_state.conversation_history.append({"role": "user", "content": q})
                 st.session_state.conversation_history.append({"role": "assistant", "content": cleaned_resp})
                 st.markdown("**Grok:**")
