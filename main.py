@@ -58,29 +58,34 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Stronger text cleaner for Grok's dense output
+# Stronger text cleaner specifically for dense trading language
 def clean_analysis_text(text):
     if not text:
         return text
     
-    # Add space after punctuation when missing
-    text = re.sub(r'([a-zA-Z0-9])([.,;:/])([a-zA-Z])', r'\1\2 \3', text)
-    text = re.sub(r'([a-zA-Z])([0-9])', r'\1 \2', text)
-    text = re.sub(r'([0-9])([a-zA-Z])', r'\1 \2', text)
+    # 1. Add space after punctuation when missing
+    text = re.sub(r'([a-zA-Z0-9)])([.,;:/])([a-zA-Z])', r'\1\2 \3', text)
     
-    # Fix common trading run-ons
-    text = re.sub(r'(\w+)(hold|add|buy|sell|trim|deploy|momentum|squeeze|play|catalyst|explorer)', r'\1 \2', text, flags=re.IGNORECASE)
-    text = re.sub(r'(cash|holdings|positions|shares|K|k)([0-9])', r'\1 \2', text, flags=re.IGNORECASE)
+    # 2. Add space before/after numbers and letters
+    text = re.sub(r'([a-zA-Z)])([0-9])', r'\1 \2', text)
+    text = re.sub(r'([0-9])([a-zA-Z(])', r'\1 \2', text)
+    
+    # 3. Fix common run-together trading phrases
+    text = re.sub(r'(\w+)(hold|add|buy|sell|trim|deploy|momentum|squeeze|play|catalyst|explorer|positions|drypowder)', r'\1 \2', text, flags=re.IGNORECASE)
+    text = re.sub(r'(cash|holdings|positions|shares)([0-9])', r'\1 \2', text, flags=re.IGNORECASE)
     text = re.sub(r'([0-9])(K|k)', r'\1 \2', text)
     
-    # Add space around slashes and dashes in dense text
-    text = re.sub(r'([a-zA-Z0-9])([/\-])([a-zA-Z0-9])', r'\1 \2 \3', text)
+    # 4. Fix slashes, dashes, and parentheses
+    text = re.sub(r'([a-zA-Z0-9)])([/\-])([a-zA-Z0-9(])', r'\1 \2 \3', text)
+    text = re.sub(r'\)([a-zA-Z0-9])', r') \1', text)
+    text = re.sub(r'([a-zA-Z0-9])\(', r'\1 (', text)
     
-    # Fix specific patterns like "Thu.Momentum" or "70−80"
-    text = re.sub(r'([A-Za-z]{3})\.([A-Za-z])', r'\1. \2', text)
+    # 5. Fix specific patterns like "70−80", "3,000)into", "Thu.Momentum"
     text = re.sub(r'([0-9])−([0-9])', r'\1 - \2', text)
+    text = re.sub(r'([0-9,]+)\)([a-zA-Z])', r'\1) \2', text)
+    text = re.sub(r'([A-Za-z]{3})\.([A-Za-z])', r'\1. \2', text)
     
-    # Final pass to ensure spaces around commas when followed by capital letter
+    # 6. Final cleanup for commas followed by capital letters
     text = re.sub(r'([a-z0-9]),([A-Z])', r'\1, \2', text)
     
     return text
@@ -289,17 +294,24 @@ Be detailed, specific, and actionable. Use headings and bullets."""
 def clean_analysis_text(text):
     if not text:
         return text
-    # Multiple passes to fix run-together text
-    text = re.sub(r'([a-zA-Z0-9])([.,;:/])([a-zA-Z])', r'\1\2 \3', text)
-    text = re.sub(r'([a-zA-Z])([0-9])', r'\1 \2', text)
-    text = re.sub(r'([0-9])([a-zA-Z])', r'\1 \2', text)
-    text = re.sub(r'(\w+)(hold|add|buy|sell|trim|deploy|momentum|squeeze|play|catalyst|explorer|Thu)', r'\1 \2', text, flags=re.IGNORECASE)
+    
+    # Multiple aggressive cleaning passes
+    text = re.sub(r'([a-zA-Z0-9)])([.,;:/])([a-zA-Z])', r'\1\2 \3', text)
+    text = re.sub(r'([a-zA-Z)])([0-9])', r'\1 \2', text)
+    text = re.sub(r'([0-9])([a-zA-Z(])', r'\1 \2', text)
+    text = re.sub(r'(\w+)(hold|add|buy|sell|trim|deploy|momentum|squeeze|play|catalyst|explorer|positions|drypowder)', r'\1 \2', text, flags=re.IGNORECASE)
     text = re.sub(r'(cash|holdings|positions|shares)([0-9])', r'\1 \2', text, flags=re.IGNORECASE)
     text = re.sub(r'([0-9])(K|k)', r'\1 \2', text)
-    text = re.sub(r'([a-zA-Z0-9])([/\-])([a-zA-Z0-9])', r'\1 \2 \3', text)
+    text = re.sub(r'([a-zA-Z0-9)])([/\-])([a-zA-Z0-9(])', r'\1 \2 \3', text)
+    text = re.sub(r'\)([a-zA-Z0-9])', r') \1', text)
+    text = re.sub(r'([a-zA-Z0-9])\(', r'\1 (', text)
     text = re.sub(r'([A-Za-z]{3})\.([A-Za-z])', r'\1. \2', text)
     text = re.sub(r'([0-9])−([0-9])', r'\1 - \2', text)
     text = re.sub(r'([a-z0-9]),([A-Z])', r'\1, \2', text)
+    
+    # Final safety net - add space before capital letters after lowercase/number
+    text = re.sub(r'([a-z0-9)])([A-Z])', r'\1 \2', text)
+    
     return text
 
 # ----------------- SIDEBAR -----------------
