@@ -11,48 +11,36 @@ import os
 import time
 import random
 import sqlite3
+import re
 from datetime import datetime
 
 st.set_page_config(page_title="AI Stock Dashboard", layout="wide")
 st.title("🚀 My Personal AI Stock Dashboard")
 st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M %p EST')}")
 
-# Final tuned CSS - specifically fixes parenthesis, slashes, and run-together text
+# CSS - balanced and clean
 st.markdown("""
     <style>
-    /* Base font consistency */
     .stMarkdown, .stMarkdown p, .stMarkdown li {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        font-size: 1.05em;
-        line-height: 1.75;
-        margin-bottom: 0.95em;
+        font-size: 1.04em;
+        line-height: 1.72;
+        margin-bottom: 0.9em;
     }
-    
-    /* Force aggressive word breaking for dense trading text */
     .stMarkdown p, .stMarkdown li {
-        white-space: pre-wrap !important;
-        word-break: break-all !important;
-        overflow-wrap: break-word !important;
-        hyphens: auto;
+        white-space: pre-wrap;
+        word-break: break-word;
+        overflow-wrap: break-word;
     }
-    
-    /* Extra protection for parentheses, slashes, and numbers */
-    .stMarkdown p span, .stMarkdown li span {
-        word-break: break-all !important;
-    }
-    
-    /* Headings */
-    .stMarkdown h1 { font-size: 1.85em; margin: 2.1em 0 0.8em 0; color: #1f77b4; }
-    .stMarkdown h2 { font-size: 1.55em; margin: 1.9em 0 0.7em 0; color: #1f77b4; }
+    .stMarkdown h1 { font-size: 1.85em; margin: 2.0em 0 0.8em 0; color: #1f77b4; }
+    .stMarkdown h2 { font-size: 1.55em; margin: 1.8em 0 0.7em 0; color: #1f77b4; }
     .stMarkdown h3 { 
         font-size: 1.35em; 
-        margin: 1.7em 0 0.6em 0; 
+        margin: 1.6em 0 0.6em 0; 
         color: #1f77b4; 
         border-left: 5px solid #1f77b4; 
         padding-left: 12px; 
     }
-    
-    /* Tight but readable bullet spacing */
     .stMarkdown ul, .stMarkdown ol {
         padding-left: 1.9em;
         margin-bottom: 1.1em;
@@ -60,8 +48,6 @@ st.markdown("""
     .stMarkdown li {
         margin-bottom: 0.55em;
     }
-    
-    /* Visual block for recommendations */
     .stMarkdown h3 + ul, .stMarkdown h3 + ol {
         background-color: #f8f9fa;
         padding: 1.2em 1.5em;
@@ -69,17 +55,23 @@ st.markdown("""
         border-left: 5px solid #1f77b4;
         margin: 1.2em 0;
     }
-    
-    /* Fix italic/bold inside dense text */
-    .stMarkdown em, .stMarkdown i, .stMarkdown strong, .stMarkdown b {
-        font-style: italic;
-        font-weight: 600;
-        margin: 0 2px;
-    }
     </style>
 """, unsafe_allow_html=True)
 
-# ----------------- DATABASE (unchanged) -----------------
+# Helper to clean dense Grok responses (fixes run-together text)
+def clean_analysis_text(text):
+    if not text:
+        return text
+    # Add space after common punctuation when missing
+    text = re.sub(r'([a-zA-Z0-9])([.,;:/])([a-zA-Z])', r'\1\2 \3', text)
+    text = re.sub(r'([a-zA-Z])([0-9])', r'\1 \2', text)
+    text = re.sub(r'([0-9])([a-zA-Z])', r'\1 \2', text)
+    # Fix common run-together patterns in trading text
+    text = re.sub(r'(\w+)(hold|add|buy|sell|trim|deploy|momentum)', r'\1 \2', text, flags=re.IGNORECASE)
+    text = re.sub(r'(cash|holdings|positions|shares)([0-9])', r'\1 \2', text, flags=re.IGNORECASE)
+    return text
+
+# ----------------- DATABASE -----------------
 def get_db_connection():
     conn = sqlite3.connect('portfolio.db')
     conn.row_factory = sqlite3.Row
@@ -272,12 +264,27 @@ Be detailed, specific, and actionable. Use headings and bullets."""
 
     with st.spinner("Generating full analysis..."):
         result = call_grok(prompt)
-        st.session_state.full_analysis = result
+        # Clean the response to fix run-together text
+        cleaned_result = clean_analysis_text(result)
+        st.session_state.full_analysis = cleaned_result
         st.session_state.conversation_history = [
             {"role": "user", "content": prompt},
-            {"role": "assistant", "content": result}
+            {"role": "assistant", "content": cleaned_result}
         ]
-        return result
+        return cleaned_result
+
+def clean_analysis_text(text):
+    if not text:
+        return text
+    # Add space after common punctuation when missing
+    text = re.sub(r'([a-zA-Z0-9])([.,;:/])([a-zA-Z])', r'\1\2 \3', text)
+    text = re.sub(r'([a-zA-Z])([0-9])', r'\1 \2', text)
+    text = re.sub(r'([0-9])([a-zA-Z])', r'\1 \2', text)
+    # Fix common trading run-ons
+    text = re.sub(r'(\w+)(hold|add|buy|sell|trim|deploy|momentum)', r'\1 \2', text, flags=re.IGNORECASE)
+    text = re.sub(r'(cash|holdings|positions|shares)([0-9])', r'\1 \2', text, flags=re.IGNORECASE)
+    text = re.sub(r'([0-9])(K|k)', r'\1 \2', text)
+    return text
 
 # ----------------- SIDEBAR -----------------
 with st.sidebar:
@@ -313,10 +320,11 @@ with tab1:
                 if "conversation_history" not in st.session_state:
                     st.session_state.conversation_history = []
                 resp = call_grok(q, st.session_state.conversation_history)
+                cleaned_resp = clean_analysis_text(resp)
                 st.session_state.conversation_history.append({"role": "user", "content": q})
-                st.session_state.conversation_history.append({"role": "assistant", "content": resp})
+                st.session_state.conversation_history.append({"role": "assistant", "content": cleaned_resp})
                 st.markdown("**Grok:**")
-                st.markdown(resp)
+                st.markdown(cleaned_resp)
     else:
         st.info("Click 'Run Full Daily Analysis' in sidebar.")
 
